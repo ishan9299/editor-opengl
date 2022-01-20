@@ -29,13 +29,15 @@
 #define GLfloat float
 
 
-typedef BOOL (WINAPI *PFNWGLCHOOSEPIXELFORMATARBPROC) (HDC hdc, const int32_t *piAttribIList,
+typedef BOOL (WINAPI *PFNWGLCHOOSEPIXELFORMATARBPROC) (HDC hdc,
+                                                       const int32_t *piAttribIList,
                                                        const FLOAT *pfAttribFList,
-                                                       UINT nMaxFormats, int32_t *piFormats,
+                                                       UINT nMaxFormats,
+                                                       int32_t *piFormats,
                                                        UINT *nNumFormats);
 
-
-typedef HGLRC (WINAPI *PFNWGLCREATECONTEXTATTRIBSARBPROC) (HDC hDC, HGLRC hShareContext,
+typedef HGLRC (WINAPI *PFNWGLCREATECONTEXTATTRIBSARBPROC) (HDC hDC,
+                                                           HGLRC hShareContext,
                                                            const int32_t *attribList);
 
 PFNWGLCHOOSEPIXELFORMATARBPROC wglChoosePixelFormatARB = 0;
