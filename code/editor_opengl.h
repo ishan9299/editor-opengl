@@ -7,25 +7,22 @@
 #define APIENTRY
 #endif
 
+#define GL_INVALID_VALUE                  0x0501
+#define GL_BLEND                          0x0BE2
 #define GL_UNSIGNED_INT                   0x1405
 #define GL_UNSIGNED_BYTE                  0x1401
-
 #define GL_TRUE                           1
 #define GL_FALSE                          0
 #define GL_REPEAT                         0x2901
 #define GL_NEAREST                        0x2600
 #define GL_LINEAR                         0x2601
-
 #define GL_VERSION                        0x1F02
 #define GL_VENDOR                         0x1F00
-
 #define GL_STATIC_DRAW                    0x88E4
 #define GL_ARRAY_BUFFER                   0x8892
 #define GL_ELEMENT_ARRAY_BUFFER           0x8893
-
 #define GL_COMPILE_STATUS                 0x8B81
 #define GL_LINK_STATUS                    0x8B82
-
 #define GL_CLAMP_TO_EDGE                  0x812F
 #define GL_NEAREST_MIPMAP_NEAREST         0x2700
 #define GL_LINEAR_MIPMAP_NEAREST          0x2701
@@ -69,12 +66,14 @@
 #define GL_TEXTURE_WRAP_S                 0x2802
 #define GL_TEXTURE_WRAP_T                 0x2803
 #define GL_BGR                            0x80E0
-
-
+#define GL_RED                            0x1903
+#define GL_GREEN                          0x1904
+#define GL_BLUE                           0x1905
 #define GL_SHADING_LANGUAGE_VERSION       0x8B8C
 #define GL_FRAGMENT_SHADER                0x8B30
 #define GL_VERTEX_SHADER                  0x8B31
-
+#define GL_ONE_MINUS_SRC_ALPHA            0x0303
+#define GL_UNPACK_ALIGNMENT               0x0CF5
 
 #define GL_DEBUG_OUTPUT                               0x92E0
 #define GL_DEBUG_OUTPUT_SYNCHRONOUS_ARB               0x8242
@@ -108,9 +107,6 @@ typedef uint8_t GLubyte;
 typedef char GLchar;
 typedef signed long long int GLsizeiptr;
 
-
-
-// gl
 typedef void (APIENTRY *PFNGLGENERATEMIPMAPPROC) (GLenum target);
 typedef void (APIENTRY *PFNGLGENVERTEXARRAYSPROC) (GLsizei n, GLuint *arrays);
 typedef void (APIENTRY *PFNGLBINDVERTEXARRAYPROC) (GLuint array);
@@ -132,14 +128,13 @@ typedef void (APIENTRY *PFNGLGETSHADERIVPROC) (GLuint shader, GLenum pname, GLin
 typedef void (APIENTRY *PFNGLGETSHADERINFOLOGPROC) (GLuint shader, GLsizei bufSize, GLsizei *length, GLchar *infoLog);
 typedef void (APIENTRY *PFNGLGETPROGRAMINFOLOGPROC) (GLuint program, GLsizei bufSize, GLsizei *length, GLchar *infoLog);
 typedef void (APIENTRY *PFNGLGETPROGRAMIVPROC) (GLuint program, GLenum pname, GLint *params);
-
 typedef void (APIENTRY *PFNGLACTIVETEXTUREPROC) (GLenum texture);
-
 typedef void (APIENTRY *PFNGLDEBUGMESSAGECONTROLARBPROC) (unsigned int source, unsigned int type, unsigned int severity, int count, const unsigned int* ids, bool enabled);
 typedef void (APIENTRY *PFNGLDEBUGMESSAGEINSERTARBPROC) (unsigned int source, unsigned int type, unsigned int id, unsigned int severity, int length, const char* buf);
 typedef void (APIENTRY *GLDEBUGPROCARB)(unsigned int source, unsigned int type, unsigned int id, unsigned int severity, int length, const char* message, void* userParam);
 typedef void (APIENTRY *PFNGLDEBUGMESSAGECALLBACKARBPROC) (GLDEBUGPROCARB callback, void* userParam);
 typedef GLuint (APIENTRY *PFNGLGETDEBUGMESSAGELOGARBPROC) (unsigned int count, int bufsize, unsigned int* sources,unsigned int* types, unsigned int* ids, unsigned int* severities, int* lengths, char* messageLog);
+typedef void (APIENTRY *PFNGLUNIFORMMATRIX4FVPROC) (GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
 
 global_variable PFNGLGENERATEMIPMAPPROC glGenerateMipmap;
 global_variable PFNGLGENVERTEXARRAYSPROC glGenVertexArrays;
@@ -162,12 +157,11 @@ global_variable PFNGLGETSHADERIVPROC glGetShaderiv;
 global_variable PFNGLGETSHADERINFOLOGPROC glGetShaderInfoLog;
 global_variable PFNGLGETPROGRAMINFOLOGPROC glGetProgramInfoLog;
 global_variable PFNGLGETPROGRAMIVPROC glGetProgramiv;
-
 global_variable PFNGLACTIVETEXTUREPROC glActiveTexture;
-
 global_variable PFNGLDEBUGMESSAGECONTROLARBPROC glDebugMessageControlARB;
 global_variable PFNGLDEBUGMESSAGEINSERTARBPROC glDebugMessageInsertARB;
 global_variable PFNGLDEBUGMESSAGECALLBACKARBPROC glDebugMessageCallbackARB;
 global_variable PFNGLGETDEBUGMESSAGELOGARBPROC glGetDebugMessageLogARB;
+global_variable PFNGLUNIFORMMATRIX4FVPROC glUniformMatrix4fv;
 
 #endif //EDITOR_OPENGL_H

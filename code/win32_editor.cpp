@@ -1,16 +1,16 @@
-#define global_variable static
-#define local_persist   static
-
 #include <stdint.h>
 #include <string.h>
+#include <math.h>
+#include <map>
 #include <windows.h>
 #include <gl/gl.h>
-#include "editor_opengl.h"
+#include "cglm/cglm.h"
+#include "editor.cpp"
+#define STB_TRUETYPE_IMPLEMENTATION
+#include "stb_truetype.h"
 #define STB_IMAGE_IMPLEMENTATION
 #include "stb_image.h"
 
-
-#define Assert(expression) if(!expression) {*(int *)0 = 0;}
 #define GL_LOAD_FUNCTION(name, type) name = (type)wglGetProcAddress(#name);
 
 global_variable int32_t running = 1;
@@ -52,27 +52,27 @@ typedef HGLRC (WINAPI *PFNWGLCREATECONTEXTATTRIBSARBPROC) (HDC hDC,
 global_variable PFNWGLCHOOSEPIXELFORMATARBPROC wglChoosePixelFormatARB = 0;
 global_variable PFNWGLCREATECONTEXTATTRIBSARBPROC wglCreateContextAttribsARB = 0;
 
-
 LRESULT CALLBACK
 EditorWindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_param) {
     LRESULT message_result = 0;
     switch(message) {
-        case WM_CLOSE:
-        case WM_DESTROY:
+    case WM_CLOSE:
+    case WM_DESTROY:
         {
             running = 0;
         }
         break;
-        case WM_SIZING: {
-            if (GlobalOpenglInit) {
-                RECT* bounds = (RECT *) l_param;
-                UINT width = bounds->right - bounds->left;
-                UINT height = bounds->bottom - bounds->top;
-                glViewport(0, 0, width, height);
-            }
+    case WM_SIZING: {
+        if (GlobalOpenglInit) {
+            RECT bounds;
+            GetWindowRect(window, &bounds);
+            UINT width = bounds.right - bounds.left;
+            UINT height = bounds.bottom - bounds.top;
+            glViewport(0, 0, width, height);
         }
+    }
         break;
-        default:
+    default:
         {
             message_result = DefWindowProc(window, message, w_param, l_param);
         }
@@ -167,24 +167,23 @@ WIN32CreateModernOpenglContext(HDC device_context, HGLRC *opengl_context)
     }
 }
 
-uint32_t
-WIN32LoadFile(const char *file_path, char **buffer)
+void *
+WIN32LoadFile(const char *file_path, LARGE_INTEGER *file_size)
 {
     HANDLE file = CreateFileA(file_path, GENERIC_READ, 0, 0, OPEN_EXISTING,
                               FILE_ATTRIBUTE_NORMAL, 0);
-    LARGE_INTEGER file_size;
-    
+    void *buffer = 0;
     if (file) {
-        if (GetFileSizeEx(file, &file_size)) {
-            *buffer = (char *)VirtualAlloc(0, file_size.QuadPart,
-                                           MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-            if (*buffer) {
+        if (GetFileSizeEx(file, file_size)) {
+            buffer = VirtualAlloc(0, file_size->QuadPart, MEM_COMMIT | MEM_RESERVE,
+                                  PAGE_READWRITE);
+            if (buffer) {
                 DWORD bytes_read;
-                DWORD buffer_size = (DWORD)file_size.QuadPart;
-                ReadFile(file, *buffer, buffer_size, &bytes_read, 0);
+                DWORD buffer_size = (DWORD)file_size->QuadPart;
+                ReadFile(file, buffer, buffer_size, &bytes_read, 0);
             }
         }
-        return (uint32_t)file_size.QuadPart;
+        return buffer;
     }
     else {
         return 0;
@@ -200,14 +199,14 @@ MessageCallback(GLuint source, GLuint type, GLuint id, GLuint severity,
     Assert(!"Opengl Error");
 #if 0
     switch(type) {
-        case GL_DEBUG_TYPE_ERROR_ARB:
+    case GL_DEBUG_TYPE_ERROR_ARB:
         {
             Assert(!"Opengl Error");
         }
         break;
     }
     switch(severity) {
-        case GL_DEBUG_SEVERITY_HIGH_ARB:
+    case GL_DEBUG_SEVERITY_HIGH_ARB:
         {
             Assert(!"Opengl Error");
         }
@@ -245,6 +244,7 @@ LoadGLFunctions()
     GL_LOAD_FUNCTION(glDebugMessageInsertARB, PFNGLDEBUGMESSAGEINSERTARBPROC);
     GL_LOAD_FUNCTION(glDebugMessageCallbackARB, PFNGLDEBUGMESSAGECALLBACKARBPROC);
     GL_LOAD_FUNCTION(glGetDebugMessageLogARB, PFNGLGETDEBUGMESSAGELOGARBPROC);
+    GL_LOAD_FUNCTION(glUniformMatrix4fv, PFNGLUNIFORMMATRIX4FVPROC);
     GlobalOpenglInit = 1;
 }
 
@@ -260,11 +260,26 @@ WinMain(HINSTANCE instance,
     window_class.hInstance = instance;
     window_class.hCursor = LoadCursorA(instance, IDC_IBEAM);
     window_class.lpszClassName = "editorwindowclass";
+
+    stbtt_fontinfo font;
+    int32_t font_offset = 0;
+    int32_t bitmap_width, bitmap_height;
+    LARGE_INTEGER font_file_size;
+    unsigned char *bitmap;
+    unsigned char *font_file =
+        (unsigned char *)WIN32LoadFile("..\\data\\IBMPlexMono-Medium.ttf",
+                                       &font_file_size);
+    font_offset = stbtt_GetFontOffsetForIndex(font_file, 0);
+    stbtt_InitFont(&font, font_file, font_offset);
+    float scale = stbtt_ScaleForPixelHeight(&font, 35.0f);
+    bitmap = stbtt_GetCodepointBitmap(&font, 0, scale, 't',
+                                      &bitmap_width, &bitmap_height,
+                                      0, 0);
     
     char *demo_file_buffer = 0;
-    uint32_t demo_file_size = 0;
-    demo_file_size =
-        WIN32LoadFile("W:\\editor\\code\\stb_truetype.h", &demo_file_buffer);
+    LARGE_INTEGER demo_file_size;
+    demo_file_buffer =
+        (char *)WIN32LoadFile("..\\code\\stb_truetype.h", &demo_file_size);
     
     if(RegisterClassEx(&window_class)) {
         LoadWGLExtensions();
@@ -285,15 +300,18 @@ WinMain(HINSTANCE instance,
                 
                 glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_ARB);
                 glDebugMessageCallbackARB(MessageCallback, 0);
+                //glEnable(GL_CULL_FACE);
+                glEnable(GL_BLEND);
+                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
                 
                 GLchar error_log[1024];
                 GLint status = 0;
                 
                 // setup shaders
                 GLchar *vert_shader_buffer = 0;
-                uint32_t vert_shader_size = 0;
-                vert_shader_size = WIN32LoadFile("W:\\editor\\code\\vert.glsl",
-                                                 &vert_shader_buffer);
+                LARGE_INTEGER vert_shader_size;
+                vert_shader_buffer = (GLchar *)WIN32LoadFile("..\\code\\vert.glsl",
+                                                             &vert_shader_size);
                 GLuint vert_shader_id = glCreateShader(GL_VERTEX_SHADER);
                 glShaderSource(vert_shader_id, 1, &vert_shader_buffer, 0);
                 glCompileShader(vert_shader_id);
@@ -306,9 +324,9 @@ WinMain(HINSTANCE instance,
                 VirtualFree(vert_shader_buffer, 0, MEM_RELEASE);
                 
                 GLchar *frag_shader_buffer = 0;
-                uint32_t frag_shader_size = 0;
-                frag_shader_size = WIN32LoadFile("W:\\editor\\code\\frag.glsl",
-                                                 &frag_shader_buffer);
+                LARGE_INTEGER frag_shader_size;
+                frag_shader_buffer = (GLchar *)WIN32LoadFile("..\\code\\frag.glsl",
+                                                             &frag_shader_size);
                 GLuint frag_shader_id = glCreateShader(GL_FRAGMENT_SHADER);
                 glShaderSource(frag_shader_id, 1, &frag_shader_buffer, 0);
                 glCompileShader(frag_shader_id);
@@ -319,7 +337,7 @@ WinMain(HINSTANCE instance,
                     Assert(status == 1);
                 }
                 VirtualFree(frag_shader_buffer, 0, MEM_RELEASE);
-                
+
                 GLuint shader_prog_id = glCreateProgram();
                 glAttachShader(shader_prog_id, vert_shader_id);
                 glAttachShader(shader_prog_id, frag_shader_id);
@@ -330,14 +348,114 @@ WinMain(HINSTANCE instance,
                     OutputDebugStringA(error_log);
                     Assert(status == 1);
                 }
-                
+
+                // TODO: fix the math
+                // MODEL: Translate * Rotation * Scale
+                // PROJECTION: Orthographic
+                // TRANSFORMED: Projection * Model * Vector
+
+                float Scale[4][4];
+                ScaleMatrix4x4(Scale, 50.0f);
+
+                float Quaternion[4];
+                float Rotation[4][4];
+                float RotationAngle = 180.00f;
+                MakeQuaternion(Quaternion, 0.0f, 0.0f, 1.0f, RotationAngle);
+                MakeQuaternionToMatrix(Quaternion, Rotation);
+
+
+                float Model[4][4];
+                MultiplyMatrix4x4(Translate, Rotation, Model);
+                MultiplyMatrix4x4(Model, Scale, Model);
+
+                RECT rect;
+                GetWindowRect(editor_window, &rect);
+                float Orthographic[4][4];
+                GLuint width = rect.right - rect.left;
+                GLuint height = rect.bottom - rect.top;
+                float ortho_right = width;
+                float ortho_left = 0.0f;
+                float ortho_top = 0.0f;
+                float ortho_bottom = height;
+                float ortho_far = -1.0f;
+                float ortho_near = 1.0f;
+                MakeOrthographicMatrix(ortho_right, ortho_left, ortho_top,
+                                       ortho_bottom, ortho_far, ortho_near,
+                                       Orthographic);
+
+                glUseProgram(shader_prog_id);
+                GLuint model_location = glGetUniformLocation(shader_prog_id, "model");
+                if (model_location == GL_INVALID_VALUE) {
+                    Assert(!"Location Error");
+                }
+                glUniformMatrix4fv(model_location, 1, GL_FALSE, (GLfloat *)Model);
+
+                GLuint projection_location = glGetUniformLocation(shader_prog_id, "projection");
+                if (model_location == GL_INVALID_VALUE) {
+                    Assert(!"Location Error");
+                }
+                glUniformMatrix4fv(projection_location, 1, GL_FALSE, (GLfloat *)Orthographic);
+
+#if 0
+                mat4 Translate;
+                vec3 translate_v = {20.0f, 20.0f, 0.0f};
+                glm_mat4_identity(Translate);
+                glm_translate(Translate, translate_v);
+		
+                mat4 Scale;
+                glm_mat4_identity(Scale);
+                float scaler = 20.0f;
+                vec3 scale_v = {scaler, scaler, scaler};
+                glm_scale(Scale, scale_v);
+
+                versor v;
+                mat4 Rotation;
+                glm_quat(v, 3.14159265358f, 0.0f, 0.0f, 1.0f);
+                glm_quat_mat4(v, Rotation);
+                float myQuaternion[4];
+                float myRotation[4][4];
+                MakeQuaternion(myQuaternion, 0.0f, 0.0f, 1.0f, 180.00f);
+                MakeQuaternionToMatrix(myQuaternion, myRotation);
+
+                mat4 Model;
+                mat4 *mul_m[] = {&Translate, &Rotation, &Scale};
+                glm_mat4_mulN(mul_m, 3, Model);
+	     
+                RECT rect;
+                mat4 Orthographic;
+                GetWindowRect(editor_window, &rect);
+                GLuint width = rect.right - rect.left;
+                GLuint height = rect.bottom - rect.top;
+                float ortho_right = (float)width;
+                float ortho_left = 0.0f;
+                float ortho_top = 0.0f;
+                float ortho_bottom = (float)height;
+                float ortho_far = -1.0f;
+                float ortho_near = 1.0f;
+                glm_ortho(ortho_left, ortho_right, ortho_bottom, ortho_top,
+                          ortho_near, ortho_far, Orthographic);
+
+                glUseProgram(shader_prog_id);
+                GLuint model_location = glGetUniformLocation(shader_prog_id, "model");
+                if (model_location == GL_INVALID_VALUE) {
+                    Assert(!"Location Error");
+                }
+                glUniformMatrix4fv(model_location, 1, GL_FALSE, (GLfloat *)Model);
+
+                GLuint projection_location = glGetUniformLocation(shader_prog_id, "projection");
+		
+                if (model_location == GL_INVALID_VALUE) {
+                    Assert(!"Location Error");
+                }
+                glUniformMatrix4fv(projection_location, 1, GL_FALSE, (GLfloat *)Orthographic);
+#endif
                 
                 // setup buffers
                 GLfloat vertices[] = {
-                    0.5f,  0.5f, 0.0f,  1.0f, 1.0f,
-                    0.5f, -0.5f, 0.0f,  1.0f, 0.0f,
-                    -0.5f, -0.5f, 0.0f, 0.0f, 0.0f,
-                    -0.5f,  0.5f, 0.0f, 0.0f, 1.0f 
+                    0.5f,  0.0f, 0.0f, 1.0f, 1.0f,
+                    0.5f,  0.5f, 0.0f, 1.0f, 0.0f,
+                    0.0f,  0.5f, 0.0f, 0.0f, 0.0f,
+                    0.0f,  0.0f, 0.0f, 0.0f, 1.0f 
                 };
                 GLuint indices[] = {
                     0, 1, 3,
@@ -368,22 +486,14 @@ WinMain(HINSTANCE instance,
                 
                 GLuint texture_id;
                 glGenTextures(1, &texture_id);
+                glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
                 glBindTexture(GL_TEXTURE_2D, texture_id);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
                 glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-                int width, height, num_channels;
-                stbi_set_flip_vertically_on_load(GL_TRUE);
-                unsigned char *image = stbi_load("W:\\editor\\data\\ExportedFont.bmp",
-                                                 &width, &height, &num_channels,
-                                                 0);
-                if (image) {
-                    glTexImage2D(GL_TEXTURE_2D, 0, GL_RGB, width, height, 0,
-                                 GL_BGR, GL_UNSIGNED_BYTE, image);
-                    glGenerateMipmap(GL_TEXTURE_2D);
-                    stbi_image_free(image);
-                }
+                glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, bitmap_width, bitmap_height, 0,
+                             GL_RED, GL_UNSIGNED_BYTE, bitmap);
                 
                 ShowWindow(editor_window, SW_SHOW);
                 
