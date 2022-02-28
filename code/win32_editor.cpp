@@ -1,15 +1,21 @@
 #include <stdint.h>
 #include <string.h>
 #include <math.h>
-#include <map>
 #include <windows.h>
 #include <gl/gl.h>
+
+#if EDITOR_USE_CGLM
+#define Assert(expression) if(!expression) {*(int *)0 = 0;}
+#define global_variable static
+#define local_persist   static
+#include "editor_opengl.h"
 #include "cglm/cglm.h"
+#else
 #include "editor.cpp"
+#endif
+
 #define STB_TRUETYPE_IMPLEMENTATION
 #include "stb_truetype.h"
-#define STB_IMAGE_IMPLEMENTATION
-#include "stb_image.h"
 
 #define GL_LOAD_FUNCTION(name, type) name = (type)wglGetProcAddress(#name);
 
@@ -55,14 +61,16 @@ global_variable PFNWGLCREATECONTEXTATTRIBSARBPROC wglCreateContextAttribsARB = 0
 LRESULT CALLBACK
 EditorWindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_param) {
     LRESULT message_result = 0;
-    switch(message) {
+    switch(message)
+    {
     case WM_CLOSE:
     case WM_DESTROY:
-        {
-            running = 0;
-        }
-        break;
-    case WM_SIZING: {
+    {
+        running = 0;
+    }
+    break;
+    case WM_SIZING:
+    {
         if (GlobalOpenglInit) {
             RECT bounds;
             GetWindowRect(window, &bounds);
@@ -71,12 +79,12 @@ EditorWindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_param) {
             glViewport(0, 0, width, height);
         }
     }
-        break;
+    break;
     default:
-        {
-            message_result = DefWindowProc(window, message, w_param, l_param);
-        }
-        break;
+    {
+        message_result = DefWindowProc(window, message, w_param, l_param);
+    }
+    break;
     }
     return message_result;
 }
@@ -157,7 +165,10 @@ WIN32CreateModernOpenglContext(HDC device_context, HGLRC *opengl_context)
         int32_t  context_attribs[] = {
             WGL_CONTEXT_MAJOR_VERSION_ARB, major_min,
             WGL_CONTEXT_MINOR_VERSION_ARB, minor_min,
-            WGL_CONTEXT_FLAGS_ARB, WGL_CONTEXT_DEBUG_BIT_ARB, // only for debug
+            WGL_CONTEXT_FLAGS_ARB,
+#if EDITOR_OPENGL_DEBUG
+            WGL_CONTEXT_DEBUG_BIT_ARB,
+#endif
             WGL_CONTEXT_PROFILE_MASK_ARB, WGL_CONTEXT_CORE_PROFILE_BIT_ARB,
             0
         };
@@ -242,8 +253,10 @@ LoadGLFunctions()
     GL_LOAD_FUNCTION(glActiveTexture, PFNGLACTIVETEXTUREPROC);
     GL_LOAD_FUNCTION(glDebugMessageControlARB, PFNGLDEBUGMESSAGECONTROLARBPROC);
     GL_LOAD_FUNCTION(glDebugMessageInsertARB, PFNGLDEBUGMESSAGEINSERTARBPROC);
+#if EDITOR_OPENGL_DEBUG
     GL_LOAD_FUNCTION(glDebugMessageCallbackARB, PFNGLDEBUGMESSAGECALLBACKARBPROC);
     GL_LOAD_FUNCTION(glGetDebugMessageLogARB, PFNGLGETDEBUGMESSAGELOGARBPROC);
+#endif
     GL_LOAD_FUNCTION(glUniformMatrix4fv, PFNGLUNIFORMMATRIX4FVPROC);
     GlobalOpenglInit = 1;
 }
@@ -298,8 +311,10 @@ WinMain(HINSTANCE instance,
                 
                 LoadGLFunctions();
                 
+#if EDITOR_OPENGL_DEBUG
                 glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_ARB);
                 glDebugMessageCallbackARB(MessageCallback, 0);
+#endif
                 //glEnable(GL_CULL_FACE);
                 glEnable(GL_BLEND);
                 glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -349,10 +364,7 @@ WinMain(HINSTANCE instance,
                     Assert(status == 1);
                 }
 
-                // TODO: fix the math
-                // MODEL: Translate * Rotation * Scale
-                // PROJECTION: Orthographic
-                // TRANSFORMED: Projection * Model * Vector
+#if !EDITOR_USE_CGLM 
 
                 float Scale[4][4];
                 ScaleMatrix4x4(Scale, 50.0f);
@@ -363,20 +375,27 @@ WinMain(HINSTANCE instance,
                 MakeQuaternion(Quaternion, 0.0f, 0.0f, 1.0f, RotationAngle);
                 MakeQuaternionToMatrix(Quaternion, Rotation);
 
+                float Translate[4][4];
+                float translate_v[3] = {20.0f, 20.0f, 0.0f};
+                TranslateMatrix4x4(Translate, translate_v);
 
                 float Model[4][4];
                 MultiplyMatrix4x4(Translate, Rotation, Model);
                 MultiplyMatrix4x4(Model, Scale, Model);
+
+                float myQuaternion[4];
+                float myRotation_[4][4];
+                MakeQuaternion(myQuaternion, 0.0f, 0.0f, 1.0f, 180.00f);
 
                 RECT rect;
                 GetWindowRect(editor_window, &rect);
                 float Orthographic[4][4];
                 GLuint width = rect.right - rect.left;
                 GLuint height = rect.bottom - rect.top;
-                float ortho_right = width;
+                float ortho_right = (float)width;
                 float ortho_left = 0.0f;
                 float ortho_top = 0.0f;
-                float ortho_bottom = height;
+                float ortho_bottom = (float)height;
                 float ortho_far = -1.0f;
                 float ortho_near = 1.0f;
                 MakeOrthographicMatrix(ortho_right, ortho_left, ortho_top,
@@ -395,8 +414,7 @@ WinMain(HINSTANCE instance,
                     Assert(!"Location Error");
                 }
                 glUniformMatrix4fv(projection_location, 1, GL_FALSE, (GLfloat *)Orthographic);
-
-#if 0
+#else
                 mat4 Translate;
                 vec3 translate_v = {20.0f, 20.0f, 0.0f};
                 glm_mat4_identity(Translate);
@@ -412,10 +430,6 @@ WinMain(HINSTANCE instance,
                 mat4 Rotation;
                 glm_quat(v, 3.14159265358f, 0.0f, 0.0f, 1.0f);
                 glm_quat_mat4(v, Rotation);
-                float myQuaternion[4];
-                float myRotation[4][4];
-                MakeQuaternion(myQuaternion, 0.0f, 0.0f, 1.0f, 180.00f);
-                MakeQuaternionToMatrix(myQuaternion, myRotation);
 
                 mat4 Model;
                 mat4 *mul_m[] = {&Translate, &Rotation, &Scale};
