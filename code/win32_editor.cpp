@@ -365,27 +365,29 @@ WinMain(HINSTANCE instance,
                 }
 
 #if !EDITOR_USE_CGLM 
-
                 float Scale[4][4];
                 ScaleMatrix4x4(Scale, 50.0f);
 
-                float Quaternion[4];
+                quat Quaternion;
                 float Rotation[4][4];
                 float RotationAngle = 180.00f;
-                MakeQuaternion(Quaternion, 0.0f, 0.0f, 1.0f, RotationAngle);
-                MakeQuaternionToMatrix(Quaternion, Rotation);
+                vec3 Axis = {};
+                Axis.x = 0.0f;
+                Axis.y = 0.0f;
+                Axis.z = 1.0f;
+                MakeQuaternion(&Quaternion, &Axis, RotationAngle);
+                MakeQuaternionToMatrix(&Quaternion, Rotation);
 
                 float Translate[4][4];
-                float translate_v[3] = {20.0f, 20.0f, 0.0f};
-                TranslateMatrix4x4(Translate, translate_v);
+                vec3 translate_v = {};
+                translate_v.x = 20.0f;
+                translate_v.y = 20.0f;
+                translate_v.z = 0.0f;
+                TranslateMatrix4x4(Translate, &translate_v);
 
                 float Model[4][4];
                 MultiplyMatrix4x4(Translate, Rotation, Model);
                 MultiplyMatrix4x4(Model, Scale, Model);
-
-                float myQuaternion[4];
-                float myRotation_[4][4];
-                MakeQuaternion(myQuaternion, 0.0f, 0.0f, 1.0f, 180.00f);
 
                 RECT rect;
                 GetWindowRect(editor_window, &rect);
