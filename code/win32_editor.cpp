@@ -11,7 +11,7 @@
 #include "editor_opengl.h"
 #include "cglm/cglm.h"
 #else
-#include "editor.cpp"
+#include "editor_math.cpp"
 #endif
 
 #define STB_TRUETYPE_IMPLEMENTATION
