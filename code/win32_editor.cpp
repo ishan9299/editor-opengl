@@ -3,15 +3,16 @@
 #include <math.h>
 #include <windows.h>
 #include <gl/gl.h>
+#include <map>
 
 #if EDITOR_USE_CGLM
-#define Assert(expression) if(!expression) {*(int *)0 = 0;}
-#define global_variable static
-#define local_persist   static
 #include "editor_opengl.h"
 #include "cglm/cglm.h"
+#include "editor.h"
 #else
+#include "editor_opengl.h"
 #include "editor_math.cpp"
+#include "editor.h"
 #endif
 
 #define STB_TRUETYPE_IMPLEMENTATION
@@ -21,6 +22,8 @@
 
 global_variable int32_t running = 1;
 global_variable int32_t GlobalOpenglInit = 0;
+global_variable uint32_t shader_prog_id;
+global_variable std::map<char, character> Characters;
 
 #define WGL_CONTEXT_DEBUG_BIT_ARB         0x00000001
 #define WGL_DRAW_TO_WINDOW_ARB            0x2001
@@ -63,28 +66,52 @@ EditorWindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_param) {
     LRESULT message_result = 0;
     switch(message)
     {
-    case WM_CLOSE:
-    case WM_DESTROY:
-    {
-        running = 0;
-    }
-    break;
-    case WM_SIZING:
-    {
-        if (GlobalOpenglInit) {
-            RECT bounds;
-            GetWindowRect(window, &bounds);
-            UINT width = bounds.right - bounds.left;
-            UINT height = bounds.bottom - bounds.top;
-            glViewport(0, 0, width, height);
+        case WM_CLOSE:
+        case WM_DESTROY:
+        {
+            running = 0;
         }
-    }
-    break;
-    default:
-    {
-        message_result = DefWindowProc(window, message, w_param, l_param);
-    }
-    break;
+        break;
+        case WM_SIZING:
+        {
+            if (GlobalOpenglInit) {
+                RECT bounds;
+                GetWindowRect(window, &bounds);
+                UINT width = bounds.right - bounds.left;
+                UINT height = bounds.bottom - bounds.top;
+                glViewport(0, 0, width, height);
+                
+                mat4 Orthographic;
+                float ortho_right = (float)width;
+                float ortho_left = 0.0f;
+                float ortho_top = 0.0f;
+                float ortho_bottom = (float)height;
+                float ortho_far = -1.0f;
+                float ortho_near = 1.0f;
+                glm_ortho(ortho_left, ortho_right, ortho_bottom, ortho_top,
+                          ortho_near, ortho_far, Orthographic);
+                
+                glUseProgram(shader_prog_id);
+                
+                GLuint projection_location =
+                    glGetUniformLocation(shader_prog_id, "projection");
+                
+                if (projection_location == GL_INVALID_VALUE) {
+                    Assert(!"Location Error");
+                }
+                
+                glUniformMatrix4fv(projection_location, 1, GL_FALSE,
+                                   (GLfloat *)Orthographic);
+                
+                glUseProgram(0);
+            }
+        }
+        break;
+        default:
+        {
+            message_result = DefWindowProc(window, message, w_param, l_param);
+        }
+        break;
     }
     return message_result;
 }
@@ -201,32 +228,226 @@ WIN32LoadFile(const char *file_path, LARGE_INTEGER *file_size)
     }
 }
 
+// TODO(not-set): this fails when the file size is huge
+static void
+RenderText(std::map<char, character>& C, GLuint vertex_array_object,
+           GLuint vertex_buffer_object, char *demo_file_buffer,
+           LARGE_INTEGER *demo_file_size, HDC device_context) {
+    
+    glClear(GL_COLOR_BUFFER_BIT);
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+    
+    float xpos = 2.0f;
+    float ypos = 2.0f;
+    
+    for (int64_t i = 0; i < 200; i++) {
+        character c = C[demo_file_buffer[i]];
+        
+        float w = (float)c.width;
+        float h = (float)c.height;
+        float line_gap = (float)(c.ascent - c.descent + c.line_gap);
+        
+        if (demo_file_buffer[i] != '\n') {
+            GLfloat vertices[] = {
+                xpos,     ypos + h, 0.0f, 0.0f, 1.0f,
+                xpos,     ypos,     0.0f, 0.0f, 0.0f,
+                xpos + w, ypos,     0.0f, 1.0f, 0.0f,
+                
+                xpos,     ypos + h, 0.0f, 0.0f, 1.0f,
+                xpos + w, ypos,     0.0f, 1.0f, 0.0f,
+                xpos + w, ypos + h, 0.0f, 1.0f, 1.0f
+            };
+            
+            glUseProgram(shader_prog_id);
+            glActiveTexture(GL_TEXTURE0);
+            glBindVertexArray(vertex_array_object);
+            
+            glBindTexture(GL_TEXTURE_2D, c.tex_id);
+            glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_object);
+            glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
+            glBindBuffer(GL_ARRAY_BUFFER, 0);
+            glDrawArrays(GL_TRIANGLES, 0, 6);
+            glUseProgram(0);
+        }
+        
+        xpos += c.advance;
+        
+        if (demo_file_buffer[i] == '\n') {
+            ypos += line_gap;
+            xpos = 2.0f;
+        }
+    }
+    
+    SwapBuffers(device_context);
+}
+
 void WINAPI
 MessageCallback(GLuint source, GLuint type, GLuint id, GLuint severity,
                 GLint length, const GLchar* message,
                 void* userParam)
 {
-    OutputDebugStringA(message);
-    Assert(!"Opengl Error");
-#if 0
+    switch(source) {
+        case GL_DEBUG_SOURCE_API_ARB:
+        {
+            OutputDebugStringA("Source: API ");
+        }
+        break;
+        case GL_DEBUG_SOURCE_WINDOW_SYSTEM_ARB:
+        {
+            OutputDebugStringA("Source: Window System ");
+        }
+        break;
+        case GL_DEBUG_SOURCE_SHADER_COMPILER_ARB:
+        {
+            OutputDebugStringA("Source: Shader Compiler ");
+        }
+        break;
+        case GL_DEBUG_SOURCE_THIRD_PARTY_ARB:
+        {
+            OutputDebugStringA("Source: Third Party ");
+        }
+        break;
+        case GL_DEBUG_SOURCE_APPLICATION_ARB:
+        {
+            OutputDebugStringA("Source: Application ");
+        }
+        break;
+        case GL_DEBUG_SOURCE_OTHER_ARB:
+        {
+            OutputDebugStringA("Source: Other ");
+        }
+        break;
+        default:
+        {
+        }
+        break;
+    }
+    
     switch(type) {
-    case GL_DEBUG_TYPE_ERROR_ARB:
+        case GL_DEBUG_TYPE_ERROR_ARB:
         {
-            Assert(!"Opengl Error");
+            OutputDebugStringA("Type: Error ");
+        }
+        break;
+        case GL_DEBUG_TYPE_DEPRECATED_BEHAVIOR_ARB:
+        {
+            OutputDebugStringA("Type: Deprecated Behaviour ");
+        }
+        break;
+        case GL_DEBUG_TYPE_UNDEFINED_BEHAVIOR_ARB:
+        {
+            OutputDebugStringA("Type: Undefined Behaviour ");
+        }
+        break;
+        case GL_DEBUG_TYPE_PORTABILITY_ARB:
+        {
+            OutputDebugStringA("Type: Portability ");
+        }
+        break;
+        case GL_DEBUG_TYPE_PERFORMANCE_ARB:
+        {
+            OutputDebugStringA("Type: Performance ");
+        }
+        break;
+        case GL_DEBUG_TYPE_OTHER_ARB:
+        {
+            OutputDebugStringA("Type: Other ");
+        }
+        break;
+        default:
+        {
         }
         break;
     }
+    
     switch(severity) {
-    case GL_DEBUG_SEVERITY_HIGH_ARB:
+        case GL_DEBUG_SEVERITY_HIGH_ARB:
         {
-            Assert(!"Opengl Error");
+            OutputDebugStringA("Severity: high ");
+            OutputDebugStringA(message);
+            Assert(!"Error");
+        }
+        break;
+        case GL_DEBUG_SEVERITY_MEDIUM_ARB:
+        {
+            OutputDebugStringA("Severity: medium ");
+            OutputDebugStringA(message);
+            Assert(!"Error");
+        }
+        break;
+        case GL_DEBUG_SEVERITY_LOW_ARB:
+        {
+            OutputDebugStringA("Severity: low ");
+            OutputDebugStringA(message);
+            Assert(!"Error");
+        }
+        break;
+        default:
+        {
         }
         break;
     }
-#endif
+    OutputDebugStringA("\n");
 }
 
-void
+static void
+LoadCodepointTextures(unsigned char* font_file, LARGE_INTEGER *font_file_size,
+                      character *characters)
+{
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    
+    stbtt_fontinfo font;
+    int32_t font_offset = 0;
+    
+    
+    font_file =
+    (unsigned char *)WIN32LoadFile("..\\data\\IBMPlexMono-Medium.ttf", font_file_size);
+    
+    font_offset = stbtt_GetFontOffsetForIndex(font_file, 0);
+    stbtt_InitFont(&font, font_file, font_offset);
+    float scale = stbtt_ScaleForPixelHeight(&font, 25.0f);
+    
+    int32_t ascent;
+    int32_t descent;
+    int32_t line_gap;
+    stbtt_GetFontVMetrics(&font, &ascent, &descent, &line_gap);
+    for (unsigned char c = 0; c < 128; c++) {
+        unsigned char *bitmap;
+        int32_t bitmap_width, bitmap_height;
+        int32_t advance_width, bearing_x;
+        bitmap = stbtt_GetCodepointBitmap(&font, scale, scale, c,
+                                          &bitmap_width, &bitmap_height,
+                                          0, 0);
+        stbtt_GetCodepointHMetrics(&font, c, &advance_width, &bearing_x);
+        
+        GLuint texture_id;
+        glGenTextures(1, &texture_id);
+        glBindTexture(GL_TEXTURE_2D, texture_id);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, bitmap_width, bitmap_height, 0, GL_RED,
+                     GL_UNSIGNED_BYTE, bitmap);
+        
+        characters->tex_id = texture_id;
+        characters->bitmap = bitmap;
+        characters->width = bitmap_width;
+        characters->height = bitmap_height;
+        characters->bearing_x = bearing_x * scale;
+        characters->ascent = ascent * scale;
+        characters->descent = descent * scale;
+        characters->advance = advance_width * scale;
+        characters->line_gap = line_gap * scale;
+        
+        Characters.insert(std::pair<char, character>(c, characters));
+    }
+    glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+static void
 LoadGLFunctions()
 {
     GL_LOAD_FUNCTION(glGenerateMipmap, PFNGLGENERATEMIPMAPPROC);
@@ -234,6 +455,7 @@ LoadGLFunctions()
     GL_LOAD_FUNCTION(glBindVertexArray, PFNGLBINDVERTEXARRAYPROC);
     GL_LOAD_FUNCTION(glGenBuffers, PFNGLGENBUFFERSPROC);
     GL_LOAD_FUNCTION(glBufferData, PFNGLBUFFERDATAPROC);
+    GL_LOAD_FUNCTION(glBufferSubData, PFNGLBUFFERSUBDATAPROC);
     GL_LOAD_FUNCTION(glBindBuffer, PFNGLBINDBUFFERPROC);
     GL_LOAD_FUNCTION(glVertexAttribPointer, PFNGLVERTEXATTRIBPOINTERPROC);
     GL_LOAD_FUNCTION(glEnableVertexAttribArray, PFNGLENABLEVERTEXATTRIBARRAYPROC);
@@ -273,26 +495,11 @@ WinMain(HINSTANCE instance,
     window_class.hInstance = instance;
     window_class.hCursor = LoadCursorA(instance, IDC_IBEAM);
     window_class.lpszClassName = "editorwindowclass";
-
-    stbtt_fontinfo font;
-    int32_t font_offset = 0;
-    int32_t bitmap_width, bitmap_height;
-    LARGE_INTEGER font_file_size;
-    unsigned char *bitmap;
-    unsigned char *font_file =
-        (unsigned char *)WIN32LoadFile("..\\data\\IBMPlexMono-Medium.ttf",
-                                       &font_file_size);
-    font_offset = stbtt_GetFontOffsetForIndex(font_file, 0);
-    stbtt_InitFont(&font, font_file, font_offset);
-    float scale = stbtt_ScaleForPixelHeight(&font, 35.0f);
-    bitmap = stbtt_GetCodepointBitmap(&font, 0, scale, 't',
-                                      &bitmap_width, &bitmap_height,
-                                      0, 0);
     
     char *demo_file_buffer = 0;
     LARGE_INTEGER demo_file_size;
     demo_file_buffer =
-        (char *)WIN32LoadFile("..\\code\\stb_truetype.h", &demo_file_size);
+    (char *)WIN32LoadFile("..\\code\\stb_truetype.h", &demo_file_size);
     
     if(RegisterClassEx(&window_class)) {
         LoadWGLExtensions();
@@ -308,16 +515,16 @@ WinMain(HINSTANCE instance,
             
             if (opengl_context) {
                 wglMakeCurrent(device_context, opengl_context);
-                
                 LoadGLFunctions();
                 
 #if EDITOR_OPENGL_DEBUG
                 glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_ARB);
                 glDebugMessageCallbackARB(MessageCallback, 0);
 #endif
-                //glEnable(GL_CULL_FACE);
-                glEnable(GL_BLEND);
-                glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+                unsigned char *font_file;
+                LARGE_INTEGER font_file_size;
+                character characters;
+                LoadCodepointTextures(font_file, &font_file_size, &characters);
                 
                 GLchar error_log[1024];
                 GLint status = 0;
@@ -352,8 +559,8 @@ WinMain(HINSTANCE instance,
                     Assert(status == 1);
                 }
                 VirtualFree(frag_shader_buffer, 0, MEM_RELEASE);
-
-                GLuint shader_prog_id = glCreateProgram();
+                
+                shader_prog_id = glCreateProgram();
                 glAttachShader(shader_prog_id, vert_shader_id);
                 glAttachShader(shader_prog_id, frag_shader_id);
                 glLinkProgram(shader_prog_id);
@@ -363,11 +570,11 @@ WinMain(HINSTANCE instance,
                     OutputDebugStringA(error_log);
                     Assert(status == 1);
                 }
-
+                
 #if !EDITOR_USE_CGLM 
                 float Scale[4][4];
                 ScaleMatrix4x4(Scale, 50.0f);
-
+                
                 quat Quaternion;
                 float Rotation[4][4];
                 float RotationAngle = 180.00f;
@@ -377,18 +584,18 @@ WinMain(HINSTANCE instance,
                 Axis.z = 1.0f;
                 MakeQuaternion(&Quaternion, &Axis, RotationAngle);
                 MakeQuaternionToMatrix(&Quaternion, Rotation);
-
+                
                 float Translate[4][4];
                 vec3 translate_v = {};
                 translate_v.x = 20.0f;
                 translate_v.y = 20.0f;
                 translate_v.z = 0.0f;
                 TranslateMatrix4x4(Translate, &translate_v);
-
+                
                 float Model[4][4];
                 MultiplyMatrix4x4(Translate, Rotation, Model);
                 MultiplyMatrix4x4(Model, Scale, Model);
-
+                
                 RECT rect;
                 GetWindowRect(editor_window, &rect);
                 float Orthographic[4][4];
@@ -403,45 +610,29 @@ WinMain(HINSTANCE instance,
                 MakeOrthographicMatrix(ortho_right, ortho_left, ortho_top,
                                        ortho_bottom, ortho_far, ortho_near,
                                        Orthographic);
-
+                
                 glUseProgram(shader_prog_id);
                 GLuint model_location = glGetUniformLocation(shader_prog_id, "model");
                 if (model_location == GL_INVALID_VALUE) {
                     Assert(!"Location Error");
                 }
                 glUniformMatrix4fv(model_location, 1, GL_FALSE, (GLfloat *)Model);
-
-                GLuint projection_location = glGetUniformLocation(shader_prog_id, "projection");
+                
+                GLuint projection_location =
+                    glGetUniformLocation(shader_prog_id, "projection");
                 if (model_location == GL_INVALID_VALUE) {
                     Assert(!"Location Error");
                 }
-                glUniformMatrix4fv(projection_location, 1, GL_FALSE, (GLfloat *)Orthographic);
+                glUniformMatrix4fv(projection_location, 1, GL_FALSE,
+                                   (GLfloat *)Orthographic);
+                glUseProgram(0);
 #else
-                mat4 Translate;
-                vec3 translate_v = {20.0f, 20.0f, 0.0f};
-                glm_mat4_identity(Translate);
-                glm_translate(Translate, translate_v);
-		
-                mat4 Scale;
-                glm_mat4_identity(Scale);
-                float scaler = 20.0f;
-                vec3 scale_v = {scaler, scaler, scaler};
-                glm_scale(Scale, scale_v);
-
-                versor v;
-                mat4 Rotation;
-                glm_quat(v, 3.14159265358f, 0.0f, 0.0f, 1.0f);
-                glm_quat_mat4(v, Rotation);
-
-                mat4 Model;
-                mat4 *mul_m[] = {&Translate, &Rotation, &Scale};
-                glm_mat4_mulN(mul_m, 3, Model);
-	     
                 RECT rect;
-                mat4 Orthographic;
                 GetWindowRect(editor_window, &rect);
                 GLuint width = rect.right - rect.left;
                 GLuint height = rect.bottom - rect.top;
+                
+                mat4 Orthographic;
                 float ortho_right = (float)width;
                 float ortho_left = 0.0f;
                 float ortho_top = 0.0f;
@@ -450,47 +641,30 @@ WinMain(HINSTANCE instance,
                 float ortho_near = 1.0f;
                 glm_ortho(ortho_left, ortho_right, ortho_bottom, ortho_top,
                           ortho_near, ortho_far, Orthographic);
-
+                
                 glUseProgram(shader_prog_id);
-                GLuint model_location = glGetUniformLocation(shader_prog_id, "model");
-                if (model_location == GL_INVALID_VALUE) {
+                
+                GLuint projection_location =
+                    glGetUniformLocation(shader_prog_id, "projection");
+                
+                if (projection_location == GL_INVALID_VALUE) {
                     Assert(!"Location Error");
                 }
-                glUniformMatrix4fv(model_location, 1, GL_FALSE, (GLfloat *)Model);
-
-                GLuint projection_location = glGetUniformLocation(shader_prog_id, "projection");
-		
-                if (model_location == GL_INVALID_VALUE) {
-                    Assert(!"Location Error");
-                }
-                glUniformMatrix4fv(projection_location, 1, GL_FALSE, (GLfloat *)Orthographic);
+                
+                glUniformMatrix4fv(projection_location, 1, GL_FALSE,
+                                   (GLfloat *)Orthographic);
+                
+                glUseProgram(0);
 #endif
                 
                 // setup buffers
-                GLfloat vertices[] = {
-                    0.5f,  0.0f, 0.0f, 1.0f, 1.0f,
-                    0.5f,  0.5f, 0.0f, 1.0f, 0.0f,
-                    0.0f,  0.5f, 0.0f, 0.0f, 0.0f,
-                    0.0f,  0.0f, 0.0f, 0.0f, 1.0f 
-                };
-                GLuint indices[] = {
-                    0, 1, 3,
-                    1, 2, 3,
-                };
                 GLuint vertex_buffer_object, vertex_array_object;
-                GLuint element_buffer_object;
                 glGenVertexArrays(1, &vertex_array_object);
                 glGenBuffers(1, &vertex_buffer_object);
-                glGenBuffers(1, &element_buffer_object);
                 glBindVertexArray(vertex_array_object);
-                
                 glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_object);
-                glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), vertices,
-                             GL_STATIC_DRAW);
-                
-                glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, element_buffer_object);
-                glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices,
-                             GL_STATIC_DRAW);
+                glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * 6 * 5, 0,
+                             GL_DYNAMIC_DRAW);
                 
                 glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat),
                                       (void *)0);
@@ -499,17 +673,6 @@ WinMain(HINSTANCE instance,
                                       (void *)(3 * sizeof(GLfloat)));
                 glEnableVertexAttribArray(1);
                 glBindVertexArray(0);
-                
-                GLuint texture_id;
-                glGenTextures(1, &texture_id);
-                glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-                glBindTexture(GL_TEXTURE_2D, texture_id);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-                glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-                glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, bitmap_width, bitmap_height, 0,
-                             GL_RED, GL_UNSIGNED_BYTE, bitmap);
                 
                 ShowWindow(editor_window, SW_SHOW);
                 
@@ -523,15 +686,8 @@ WinMain(HINSTANCE instance,
                         DispatchMessage(&message);
                     }
                     
-                    // TODO(not-set): always glClear first
-                    glClear(GL_COLOR_BUFFER_BIT);
-                    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-                    glBindTexture(GL_TEXTURE_2D, texture_id);
-                    glUseProgram(shader_prog_id);
-                    glBindVertexArray(vertex_array_object);
-                    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-                    
-                    SwapBuffers(device_context);
+                    RenderText(Characters, vertex_array_object, vertex_buffer_object,
+                               demo_file_buffer, &demo_file_size, device_context);
                 }
             }
             

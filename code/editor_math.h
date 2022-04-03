@@ -14,9 +14,23 @@
 #define PI 3.1415926535897932384626433832795f
 #define THETA_TO_PI(angle) ((PI / 180.0f) * angle)
 
-typedef float f32;
+struct vec2i {
+    i32 x;
+    i32 y;
+};
 
-struct vec3 {
+struct vec2f {
+    f32 x;
+    f32 y;
+};
+
+struct vec3i {
+    i32 x;
+    i32 y;
+    i32 z;
+};
+
+struct vec3f {
     f32 x;
     f32 y;
     f32 z;

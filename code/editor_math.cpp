@@ -1,11 +1,5 @@
 #include "editor_math.h"
 
-#define Assert(expression) if(!expression) {*(int *)0 = 0;}
-#define global_variable static
-#define local_persist   static
-
-#include "editor_opengl.h"
-
 void
 IdentityMatrix4x4(f32 matrix[][4])
 {
