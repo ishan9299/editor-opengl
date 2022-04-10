@@ -93,15 +93,12 @@ EditorWindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_param) {
                 
                 glUseProgram(shader_prog_id);
                 
-                GLuint projection_location =
-                    glGetUniformLocation(shader_prog_id, "projection");
-                
+                GLuint projection_location = glGetUniformLocation(shader_prog_id, "projection");
                 if (projection_location == GL_INVALID_VALUE) {
                     Assert(!"Location Error");
                 }
                 
-                glUniformMatrix4fv(projection_location, 1, GL_FALSE,
-                                   (GLfloat *)Orthographic);
+                glUniformMatrix4fv(projection_location, 1, GL_FALSE, (GLfloat *)Orthographic);
                 
                 glUseProgram(0);
             }
@@ -237,10 +234,10 @@ RenderText(std::map<char, character>& C, GLuint vertex_array_object,
     glClear(GL_COLOR_BUFFER_BIT);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     
-    float xpos = 2.0f;
-    float ypos = 2.0f;
+    float xpos = 0.0f;
+    float ypos = 0.0f;
     
-    for (int64_t i = 0; i < 200; i++) {
+    for (int64_t i = 0; i < 1600; i++) {
         character c = C[demo_file_buffer[i]];
         
         float w = (float)c.width;
@@ -249,13 +246,13 @@ RenderText(std::map<char, character>& C, GLuint vertex_array_object,
         
         if (demo_file_buffer[i] != '\n') {
             GLfloat vertices[] = {
-                xpos,     ypos + h, 0.0f, 0.0f, 1.0f,
-                xpos,     ypos,     0.0f, 0.0f, 0.0f,
-                xpos + w, ypos,     0.0f, 1.0f, 0.0f,
+                xpos + c.xoffset,     ypos + c.ascent + c.yoffset + h, 0.0f, 0.0f, 1.0f,
+                xpos + c.xoffset,     ypos + c.ascent + c.yoffset,     0.0f, 0.0f, 0.0f,
+                xpos + c.xoffset + w, ypos + c.ascent + c.yoffset,     0.0f, 1.0f, 0.0f,
                 
-                xpos,     ypos + h, 0.0f, 0.0f, 1.0f,
-                xpos + w, ypos,     0.0f, 1.0f, 0.0f,
-                xpos + w, ypos + h, 0.0f, 1.0f, 1.0f
+                xpos + c.xoffset,     ypos + c.ascent + c.yoffset + h, 0.0f, 0.0f, 1.0f,
+                xpos + c.xoffset + w, ypos + c.ascent + c.yoffset,     0.0f, 1.0f, 0.0f,
+                xpos + c.xoffset + w, ypos + c.ascent + c.yoffset + h, 0.0f, 1.0f, 1.0f
             };
             
             glUseProgram(shader_prog_id);
@@ -274,7 +271,7 @@ RenderText(std::map<char, character>& C, GLuint vertex_array_object,
         
         if (demo_file_buffer[i] == '\n') {
             ypos += line_gap;
-            xpos = 2.0f;
+            xpos = 0.0f;
         }
     }
     
@@ -407,7 +404,7 @@ LoadCodepointTextures(unsigned char* font_file, LARGE_INTEGER *font_file_size,
     
     font_offset = stbtt_GetFontOffsetForIndex(font_file, 0);
     stbtt_InitFont(&font, font_file, font_offset);
-    float scale = stbtt_ScaleForPixelHeight(&font, 25.0f);
+    float scale = stbtt_ScaleForPixelHeight(&font, 15.0f);
     
     int32_t ascent;
     int32_t descent;
@@ -416,11 +413,11 @@ LoadCodepointTextures(unsigned char* font_file, LARGE_INTEGER *font_file_size,
     for (unsigned char c = 0; c < 128; c++) {
         unsigned char *bitmap;
         int32_t bitmap_width, bitmap_height;
-        int32_t advance_width, bearing_x;
-        bitmap = stbtt_GetCodepointBitmap(&font, scale, scale, c,
-                                          &bitmap_width, &bitmap_height,
-                                          0, 0);
-        stbtt_GetCodepointHMetrics(&font, c, &advance_width, &bearing_x);
+        int32_t advance_width, left_side_bearing;
+        int32_t xoffset, yoffset;
+        bitmap = stbtt_GetCodepointBitmap(&font, scale, scale, c, &bitmap_width,
+                                          &bitmap_height, &xoffset, &yoffset);
+        stbtt_GetCodepointHMetrics(&font, c, &advance_width, &left_side_bearing);
         
         GLuint texture_id;
         glGenTextures(1, &texture_id);
@@ -436,13 +433,15 @@ LoadCodepointTextures(unsigned char* font_file, LARGE_INTEGER *font_file_size,
         characters->bitmap = bitmap;
         characters->width = bitmap_width;
         characters->height = bitmap_height;
-        characters->bearing_x = bearing_x * scale;
+        characters->xoffset = xoffset;
+        characters->yoffset = yoffset;
+        characters->advance = advance_width * scale;
+        characters->left_side_bearing = left_side_bearing * scale;
         characters->ascent = ascent * scale;
         characters->descent = descent * scale;
-        characters->advance = advance_width * scale;
         characters->line_gap = line_gap * scale;
         
-        Characters.insert(std::pair<char, character>(c, characters));
+        Characters.insert(std::pair<char, character>(c, *characters));
     }
     glBindTexture(GL_TEXTURE_2D, 0);
 }
@@ -498,16 +497,14 @@ WinMain(HINSTANCE instance,
     
     char *demo_file_buffer = 0;
     LARGE_INTEGER demo_file_size;
-    demo_file_buffer =
-    (char *)WIN32LoadFile("..\\code\\stb_truetype.h", &demo_file_size);
+    demo_file_buffer = (char *)WIN32LoadFile("..\\code\\stb_truetype.h", &demo_file_size);
     
     if(RegisterClassEx(&window_class)) {
         LoadWGLExtensions();
-        HWND editor_window =
-            CreateWindowExA(0, window_class.lpszClassName, "editor",
-                            WS_OVERLAPPEDWINDOW, CW_USEDEFAULT,
-                            CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
-                            0, 0, instance, 0);
+        HWND editor_window = CreateWindowExA(0, window_class.lpszClassName, "editor",
+                                             WS_OVERLAPPEDWINDOW, CW_USEDEFAULT,
+                                             CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
+                                             0, 0, instance, 0);
         if (editor_window) {
             HDC device_context = GetDC(editor_window);
             HGLRC opengl_context;
@@ -521,7 +518,7 @@ WinMain(HINSTANCE instance,
                 glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_ARB);
                 glDebugMessageCallbackARB(MessageCallback, 0);
 #endif
-                unsigned char *font_file;
+                unsigned char *font_file = 0;
                 LARGE_INTEGER font_file_size;
                 character characters;
                 LoadCodepointTextures(font_file, &font_file_size, &characters);
@@ -571,62 +568,6 @@ WinMain(HINSTANCE instance,
                     Assert(status == 1);
                 }
                 
-#if !EDITOR_USE_CGLM 
-                float Scale[4][4];
-                ScaleMatrix4x4(Scale, 50.0f);
-                
-                quat Quaternion;
-                float Rotation[4][4];
-                float RotationAngle = 180.00f;
-                vec3 Axis = {};
-                Axis.x = 0.0f;
-                Axis.y = 0.0f;
-                Axis.z = 1.0f;
-                MakeQuaternion(&Quaternion, &Axis, RotationAngle);
-                MakeQuaternionToMatrix(&Quaternion, Rotation);
-                
-                float Translate[4][4];
-                vec3 translate_v = {};
-                translate_v.x = 20.0f;
-                translate_v.y = 20.0f;
-                translate_v.z = 0.0f;
-                TranslateMatrix4x4(Translate, &translate_v);
-                
-                float Model[4][4];
-                MultiplyMatrix4x4(Translate, Rotation, Model);
-                MultiplyMatrix4x4(Model, Scale, Model);
-                
-                RECT rect;
-                GetWindowRect(editor_window, &rect);
-                float Orthographic[4][4];
-                GLuint width = rect.right - rect.left;
-                GLuint height = rect.bottom - rect.top;
-                float ortho_right = (float)width;
-                float ortho_left = 0.0f;
-                float ortho_top = 0.0f;
-                float ortho_bottom = (float)height;
-                float ortho_far = -1.0f;
-                float ortho_near = 1.0f;
-                MakeOrthographicMatrix(ortho_right, ortho_left, ortho_top,
-                                       ortho_bottom, ortho_far, ortho_near,
-                                       Orthographic);
-                
-                glUseProgram(shader_prog_id);
-                GLuint model_location = glGetUniformLocation(shader_prog_id, "model");
-                if (model_location == GL_INVALID_VALUE) {
-                    Assert(!"Location Error");
-                }
-                glUniformMatrix4fv(model_location, 1, GL_FALSE, (GLfloat *)Model);
-                
-                GLuint projection_location =
-                    glGetUniformLocation(shader_prog_id, "projection");
-                if (model_location == GL_INVALID_VALUE) {
-                    Assert(!"Location Error");
-                }
-                glUniformMatrix4fv(projection_location, 1, GL_FALSE,
-                                   (GLfloat *)Orthographic);
-                glUseProgram(0);
-#else
                 RECT rect;
                 GetWindowRect(editor_window, &rect);
                 GLuint width = rect.right - rect.left;
@@ -639,13 +580,12 @@ WinMain(HINSTANCE instance,
                 float ortho_bottom = (float)height;
                 float ortho_far = -1.0f;
                 float ortho_near = 1.0f;
-                glm_ortho(ortho_left, ortho_right, ortho_bottom, ortho_top,
-                          ortho_near, ortho_far, Orthographic);
+                glm_ortho(ortho_left, ortho_right, ortho_bottom, ortho_top, ortho_near,
+                          ortho_far, Orthographic);
                 
                 glUseProgram(shader_prog_id);
                 
-                GLuint projection_location =
-                    glGetUniformLocation(shader_prog_id, "projection");
+                GLuint projection_location = glGetUniformLocation(shader_prog_id, "projection");
                 
                 if (projection_location == GL_INVALID_VALUE) {
                     Assert(!"Location Error");
@@ -655,7 +595,6 @@ WinMain(HINSTANCE instance,
                                    (GLfloat *)Orthographic);
                 
                 glUseProgram(0);
-#endif
                 
                 // setup buffers
                 GLuint vertex_buffer_object, vertex_array_object;

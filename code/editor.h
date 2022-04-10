@@ -15,11 +15,15 @@ typedef float f32;
 struct character {
     GLuint tex_id;
     unsigned char *bitmap;
-    int32_t width;
-    int32_t height;
-    f32 bearing_x;
-    f32 ascent;
+    i32 width;
+    i32 height;
+    i32 xoffset;
+    i32 yoffset;
+    
+    f32 left_side_bearing;
     f32 advance;
+    
+    f32 ascent;
     f32 line_gap;
     f32 descent;
 };
