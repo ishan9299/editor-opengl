@@ -72,11 +72,11 @@ EditorWindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_param) {
             running = 0;
         }
         break;
-        case WM_SIZING:
+        case WM_SIZE:
         {
-            if (GlobalOpenglInit) {
+            if (w_param == SIZE_MAXIMIZED || w_param == SIZE_RESTORED) {
                 RECT bounds;
-                GetWindowRect(window, &bounds);
+                GetClientRect(window, &bounds);
                 UINT width = bounds.right - bounds.left;
                 UINT height = bounds.bottom - bounds.top;
                 glViewport(0, 0, width, height);
@@ -100,6 +100,38 @@ EditorWindowProc(HWND window, UINT message, WPARAM w_param, LPARAM l_param) {
                 
                 glUniformMatrix4fv(projection_location, 1, GL_FALSE, (GLfloat *)Orthographic);
                 
+                glUseProgram(0);
+            }
+        }
+        break;
+        
+        case WM_SIZING:
+        {
+            if (GlobalOpenglInit) {
+                RECT bounds;
+                GetClientRect(window, &bounds);
+                UINT width = bounds.right - bounds.left;
+                UINT height = bounds.bottom - bounds.top;
+                glViewport(0, 0, width, height);
+                
+                mat4 Orthographic;
+                f32 ortho_right = (f32)width;
+                f32 ortho_left = 0.0f;
+                f32 ortho_top = 0.0f;
+                f32 ortho_bottom = (f32)height;
+                f32 ortho_far = -1.0f;
+                f32 ortho_near = 1.0f;
+                glm_ortho(ortho_left, ortho_right, ortho_bottom, ortho_top,
+                          ortho_near, ortho_far, Orthographic);
+                
+                glUseProgram(shader_prog_id);
+                
+                GLuint projection_location = glGetUniformLocation(shader_prog_id, "projection");
+                if (projection_location == GL_INVALID_VALUE) {
+                    Assert(!"Location Error");
+                }
+                
+                glUniformMatrix4fv(projection_location, 1, GL_FALSE, (GLfloat *)Orthographic);
                 glUseProgram(0);
             }
         }
@@ -237,22 +269,25 @@ RenderText(std::map<char, character>& C, GLuint vertex_array_object,
     float xpos = 0.0f;
     float ypos = 0.0f;
     
-    for (int64_t i = 0; i < 1600; i++) {
+    for (int64_t i = 0; i < 3600; i++) {
         character c = C[demo_file_buffer[i]];
         
         float w = (float)c.width;
         float h = (float)c.height;
         float line_gap = (float)(c.ascent - c.descent + c.line_gap);
         
+        float offset = c.yoffset + c.ascent;
+        //float offset = 0.0f;
+        
         if (demo_file_buffer[i] != '\n') {
             GLfloat vertices[] = {
-                xpos + c.xoffset,     ypos + c.ascent + c.yoffset + h, 0.0f, 0.0f, 1.0f,
-                xpos + c.xoffset,     ypos + c.ascent + c.yoffset,     0.0f, 0.0f, 0.0f,
-                xpos + c.xoffset + w, ypos + c.ascent + c.yoffset,     0.0f, 1.0f, 0.0f,
+                xpos + c.xoffset,     ypos + offset + h, 0.0f, 0.0f, 1.0f,
+                xpos + c.xoffset,     ypos + offset,     0.0f, 0.0f, 0.0f,
+                xpos + c.xoffset + w, ypos + offset,     0.0f, 1.0f, 0.0f,
                 
-                xpos + c.xoffset,     ypos + c.ascent + c.yoffset + h, 0.0f, 0.0f, 1.0f,
-                xpos + c.xoffset + w, ypos + c.ascent + c.yoffset,     0.0f, 1.0f, 0.0f,
-                xpos + c.xoffset + w, ypos + c.ascent + c.yoffset + h, 0.0f, 1.0f, 1.0f
+                xpos + c.xoffset,     ypos + offset + h, 0.0f, 0.0f, 1.0f,
+                xpos + c.xoffset + w, ypos + offset,     0.0f, 1.0f, 0.0f,
+                xpos + c.xoffset + w, ypos + offset + h, 0.0f, 1.0f, 1.0f
             };
             
             glUseProgram(shader_prog_id);
@@ -404,7 +439,7 @@ LoadCodepointTextures(unsigned char* font_file, LARGE_INTEGER *font_file_size,
     
     font_offset = stbtt_GetFontOffsetForIndex(font_file, 0);
     stbtt_InitFont(&font, font_file, font_offset);
-    float scale = stbtt_ScaleForPixelHeight(&font, 15.0f);
+    float scale = stbtt_ScaleForPixelHeight(&font, 25.0f);
     
     int32_t ascent;
     int32_t descent;
@@ -444,6 +479,92 @@ LoadCodepointTextures(unsigned char* font_file, LARGE_INTEGER *font_file_size,
         Characters.insert(std::pair<char, character>(c, *characters));
     }
     glBindTexture(GL_TEXTURE_2D, 0);
+}
+
+// TODO(not-set): shader_prog_id is a global varibale which needs to change
+static void
+LoadGLShaders(const char *vert_shader_file, const char *frag_shader_file)
+{
+    GLchar error_log[1024];
+    GLint status = 0;
+    
+    GLchar *vert_shader_buffer = 0;
+    LARGE_INTEGER vert_shader_size;
+    vert_shader_buffer = (GLchar *)WIN32LoadFile(vert_shader_file, &vert_shader_size);
+    GLuint vert_shader_id = glCreateShader(GL_VERTEX_SHADER);
+    glShaderSource(vert_shader_id, 1, &vert_shader_buffer, 0);
+    glCompileShader(vert_shader_id);
+    glGetShaderiv(vert_shader_id, GL_COMPILE_STATUS, &status);
+    if (!status) {
+        glGetShaderInfoLog(vert_shader_id, 1024, 0, error_log);
+        OutputDebugStringA(error_log);
+        Assert(status == 1);
+    }
+    VirtualFree(vert_shader_buffer, 0, MEM_RELEASE);
+    
+    GLchar *frag_shader_buffer = 0;
+    LARGE_INTEGER frag_shader_size;
+    frag_shader_buffer = (GLchar *)WIN32LoadFile(frag_shader_file, &frag_shader_size);
+    GLuint frag_shader_id = glCreateShader(GL_FRAGMENT_SHADER);
+    glShaderSource(frag_shader_id, 1, &frag_shader_buffer, 0);
+    glCompileShader(frag_shader_id);
+    glGetShaderiv(frag_shader_id, GL_COMPILE_STATUS, &status);
+    if (!status) {
+        glGetShaderInfoLog(frag_shader_id, 1024, 0, error_log);
+        OutputDebugStringA(error_log);
+        Assert(status == 1);
+    }
+    VirtualFree(frag_shader_buffer, 0, MEM_RELEASE);
+    
+    shader_prog_id = glCreateProgram();
+    glAttachShader(shader_prog_id, vert_shader_id);
+    glAttachShader(shader_prog_id, frag_shader_id);
+    glLinkProgram(shader_prog_id);
+    glGetProgramiv(shader_prog_id, GL_LINK_STATUS, &status);
+    if (!status) {
+        glGetProgramInfoLog(shader_prog_id, 1024, 0, error_log);
+        OutputDebugStringA(error_log);
+        Assert(status == 1);
+    }
+}
+
+static void
+LoadGLMVP(uint32_t window_width, uint32_t window_height)
+{
+    mat4 Orthographic;
+    float ortho_right = (float)window_width;
+    float ortho_left = 0.0f;
+    float ortho_top = 0.0f;
+    float ortho_bottom = (float)window_height;
+    float ortho_far = -1.0f;
+    float ortho_near = 1.0f;
+    glm_ortho(ortho_left, ortho_right, ortho_bottom, ortho_top, ortho_near, ortho_far,
+              Orthographic);
+    
+    glUseProgram(shader_prog_id);
+    GLuint projection_location = glGetUniformLocation(shader_prog_id, "projection");
+    if (projection_location == GL_INVALID_VALUE) {
+        Assert(!"Location Error");
+    }
+    glUniformMatrix4fv(projection_location, 1, GL_FALSE, (GLfloat *)Orthographic);
+    glUseProgram(0);
+}
+
+static void
+LoadGLBuffers(GLuint *vbo, GLuint *vao)
+{
+    glGenVertexArrays(1, vao);
+    glGenBuffers(1, vbo);
+    glBindVertexArray(*vao);
+    glBindBuffer(GL_ARRAY_BUFFER, *vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * 6 * 5, 0, GL_DYNAMIC_DRAW);
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat), (void *)0);
+    glEnableVertexAttribArray(0);
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat),
+                          (void *)(3 * sizeof(GLfloat)));
+    glEnableVertexAttribArray(1);
+    glBindVertexArray(0);
+    
 }
 
 static void
@@ -522,96 +643,17 @@ WinMain(HINSTANCE instance,
                 LARGE_INTEGER font_file_size;
                 character characters;
                 LoadCodepointTextures(font_file, &font_file_size, &characters);
-                
-                GLchar error_log[1024];
-                GLint status = 0;
-                
-                // setup shaders
-                GLchar *vert_shader_buffer = 0;
-                LARGE_INTEGER vert_shader_size;
-                vert_shader_buffer = (GLchar *)WIN32LoadFile("..\\code\\vert.glsl",
-                                                             &vert_shader_size);
-                GLuint vert_shader_id = glCreateShader(GL_VERTEX_SHADER);
-                glShaderSource(vert_shader_id, 1, &vert_shader_buffer, 0);
-                glCompileShader(vert_shader_id);
-                glGetShaderiv(vert_shader_id, GL_COMPILE_STATUS, &status);
-                if (!status) {
-                    glGetShaderInfoLog(vert_shader_id, 1024, 0, error_log);
-                    OutputDebugStringA(error_log);
-                    Assert(status == 1);
-                }
-                VirtualFree(vert_shader_buffer, 0, MEM_RELEASE);
-                
-                GLchar *frag_shader_buffer = 0;
-                LARGE_INTEGER frag_shader_size;
-                frag_shader_buffer = (GLchar *)WIN32LoadFile("..\\code\\frag.glsl",
-                                                             &frag_shader_size);
-                GLuint frag_shader_id = glCreateShader(GL_FRAGMENT_SHADER);
-                glShaderSource(frag_shader_id, 1, &frag_shader_buffer, 0);
-                glCompileShader(frag_shader_id);
-                glGetShaderiv(frag_shader_id, GL_COMPILE_STATUS, &status);
-                if (!status) {
-                    glGetShaderInfoLog(frag_shader_id, 1024, 0, error_log);
-                    OutputDebugStringA(error_log);
-                    Assert(status == 1);
-                }
-                VirtualFree(frag_shader_buffer, 0, MEM_RELEASE);
-                
-                shader_prog_id = glCreateProgram();
-                glAttachShader(shader_prog_id, vert_shader_id);
-                glAttachShader(shader_prog_id, frag_shader_id);
-                glLinkProgram(shader_prog_id);
-                glGetProgramiv(shader_prog_id, GL_LINK_STATUS, &status);
-                if (!status) {
-                    glGetProgramInfoLog(shader_prog_id, 1024, 0, error_log);
-                    OutputDebugStringA(error_log);
-                    Assert(status == 1);
-                }
+                LoadGLShaders("..\\code\\vert.glsl", "..\\code\\frag.glsl");
                 
                 RECT rect;
-                GetWindowRect(editor_window, &rect);
-                GLuint width = rect.right - rect.left;
-                GLuint height = rect.bottom - rect.top;
+                GetClientRect(editor_window, &rect);
+                uint32_t width = rect.right - rect.left;
+                uint32_t height = rect.bottom - rect.top;
+                LoadGLMVP(width, height);
                 
-                mat4 Orthographic;
-                float ortho_right = (float)width;
-                float ortho_left = 0.0f;
-                float ortho_top = 0.0f;
-                float ortho_bottom = (float)height;
-                float ortho_far = -1.0f;
-                float ortho_near = 1.0f;
-                glm_ortho(ortho_left, ortho_right, ortho_bottom, ortho_top, ortho_near,
-                          ortho_far, Orthographic);
-                
-                glUseProgram(shader_prog_id);
-                
-                GLuint projection_location = glGetUniformLocation(shader_prog_id, "projection");
-                
-                if (projection_location == GL_INVALID_VALUE) {
-                    Assert(!"Location Error");
-                }
-                
-                glUniformMatrix4fv(projection_location, 1, GL_FALSE,
-                                   (GLfloat *)Orthographic);
-                
-                glUseProgram(0);
-                
-                // setup buffers
-                GLuint vertex_buffer_object, vertex_array_object;
-                glGenVertexArrays(1, &vertex_array_object);
-                glGenBuffers(1, &vertex_buffer_object);
-                glBindVertexArray(vertex_array_object);
-                glBindBuffer(GL_ARRAY_BUFFER, vertex_buffer_object);
-                glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * 6 * 5, 0,
-                             GL_DYNAMIC_DRAW);
-                
-                glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat),
-                                      (void *)0);
-                glEnableVertexAttribArray(0);
-                glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5 * sizeof(GLfloat),
-                                      (void *)(3 * sizeof(GLfloat)));
-                glEnableVertexAttribArray(1);
-                glBindVertexArray(0);
+                GLuint vertex_buffer_object;
+                GLuint vertex_array_object;
+                LoadGLBuffers(&vertex_buffer_object, &vertex_array_object);
                 
                 ShowWindow(editor_window, SW_SHOW);
                 
