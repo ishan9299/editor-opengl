@@ -138,6 +138,8 @@ typedef void (APIENTRY *GLDEBUGPROCARB)(unsigned int source, unsigned int type, 
 typedef void (APIENTRY *PFNGLDEBUGMESSAGECALLBACKARBPROC) (GLDEBUGPROCARB callback, void* userParam);
 typedef GLuint (APIENTRY *PFNGLGETDEBUGMESSAGELOGARBPROC) (unsigned int count, int bufsize, unsigned int* sources,unsigned int* types, unsigned int* ids, unsigned int* severities, int* lengths, char* messageLog);
 typedef void (APIENTRY *PFNGLUNIFORMMATRIX4FVPROC) (GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
+typedef void (APIENTRY *PFNGLUNIFORM4FVPROC) (GLint location, GLsizei count, const GLfloat *value);
+
 
 static PFNGLGENERATEMIPMAPPROC glGenerateMipmap;
 static PFNGLGENVERTEXARRAYSPROC glGenVertexArrays;
@@ -167,5 +169,6 @@ static PFNGLDEBUGMESSAGEINSERTARBPROC glDebugMessageInsertARB;
 static PFNGLDEBUGMESSAGECALLBACKARBPROC glDebugMessageCallbackARB;
 static PFNGLGETDEBUGMESSAGELOGARBPROC glGetDebugMessageLogARB;
 static PFNGLUNIFORMMATRIX4FVPROC glUniformMatrix4fv;
+static PFNGLUNIFORM4FVPROC glUniform4fv;
 
 #endif //EDITOR_OPENGL_H
