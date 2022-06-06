@@ -28,16 +28,15 @@ long_line_behaviour=1
 long_line_column=72
 
 [files]
-current_page=8
-FILE_NAME_0=3537;C++;0;EUTF-8;1;1;0;C%3A%5CUsers%5Cishan%5Cwork%5CProjects%5CEditor%5Ccode%5Ceditor.cpp;0;4
+current_page=0
+FILE_NAME_0=3029;C++;0;EUTF-8;1;1;0;C%3A%5CUsers%5Cishan%5Cwork%5CProjects%5CEditor%5Ccode%5Ceditor.cpp;0;4
 FILE_NAME_1=255;C++;0;EUTF-8;1;1;0;C%3A%5CUsers%5Cishan%5Cwork%5CProjects%5CEditor%5Ccode%5Ceditor.h;0;4
-FILE_NAME_2=4175;C++;0;EUTF-8;1;1;0;C%3A%5CUsers%5Cishan%5Cwork%5CProjects%5CEditor%5Ccode%5Cwin32_editor.cpp;0;4
+FILE_NAME_2=9345;C++;0;EUTF-8;1;1;0;C%3A%5CUsers%5Cishan%5Cwork%5CProjects%5CEditor%5Ccode%5Cwin32_editor.cpp;0;4
 FILE_NAME_3=0;C++;0;EUTF-8;1;1;0;C%3A%5CUsers%5Cishan%5Cwork%5CProjects%5CEditor%5Ccode%5Ceditor_opengl.h;0;4
 FILE_NAME_4=0;GLSL;0;EUTF-8;1;1;0;C%3A%5CUsers%5Cishan%5Cwork%5CProjects%5CEditor%5Ccode%5Ctext_frag.glsl;0;4
 FILE_NAME_5=159;GLSL;0;EUTF-8;1;1;0;C%3A%5CUsers%5Cishan%5Cwork%5CProjects%5CEditor%5Ccode%5Ctext_vert.glsl;0;4
 FILE_NAME_6=0;GLSL;0;EUTF-8;1;1;0;C%3A%5CUsers%5Cishan%5Cwork%5CProjects%5CEditor%5Ccode%5Ccursor_frag.glsl;0;4
 FILE_NAME_7=0;GLSL;0;EUTF-8;1;1;0;C%3A%5CUsers%5Cishan%5Cwork%5CProjects%5CEditor%5Ccode%5Ccursor_vert.glsl;0;4
-FILE_NAME_8=1385;C;0;EUTF-8;1;1;0;C%3A%5CUsers%5Cishan%5Cwork%5CProjects%5CEditor%5Ccode%5Cassets%5Cloader.c;0;4
 
 [build-menu]
 C++FT_00_LB=_Compile

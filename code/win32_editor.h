@@ -39,10 +39,10 @@ global_variable PFNWGLCREATECONTEXTATTRIBSARBPROC wglCreateContextAttribsARB = 0
 
 LRESULT CALLBACK EditorWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM l_param);
 void Input(WPARAM wParam);
-void LoadWGLExtensions();
+void WIN32LoadWGLExtensions();
 void WIN32CreateModernOpenglContext(HDC device_context, HGLRC *openglContext);
 void* WIN32LoadFile(const char *file_path);
-static void LoadGLFunctions();
+static void WIN32LoadGLFunctions();
 void WINAPI MessageCallback(GLuint source, GLuint type, GLuint id, GLuint severity,
                             GLint length, const GLchar* message, void* userParam);
 

@@ -49,22 +49,46 @@ struct FontGlyphs {
     i32 height;
     i32 xoffset;
     i32 yoffset;
-    f32 leftSideBearing;
-    f32 advance;
+    i32 leftSideBearing;
+    i32 advance;
+    
+    u32 fontatlasOffsetX;
+    u32 fontatlasOffsetY;
 };
 
 struct FontMetrics {
-    f32 ascent;
-    f32 lineGap;
-    f32 descent;
+    i32 ascent;
+    i32 lineGap;
+    i32 descent;
 };
 
-global_variable u32 textShaderProgId;
-global_variable u32 textVAO;
-global_variable u32 textVBO;
+struct Vertex {
+    float vertCoords[2];
+    float vertColor[4];
+    
+    float texCoords[2];
+    float texColor[4];
+};
 
-global_variable u32 cursorShaderProgId;
-global_variable u32 cursorVAO;
-global_variable u32 cursorVBO;
+struct Vec2f {
+    float x;
+    float y;
+};
+
+global_variable u32 rectShaderProgId;
+global_variable u32 rectVAO;
+global_variable u32 rectVBO;
+global_variable u32 rectEBO;
+
+global_variable GLuint fontatlasTextureId;
+global_variable u32 fontatlasWidth = 512;
+global_variable f32 fontSize = 64.0f;
+
+global_variable FontGlyphs glyph[128];
+global_variable FontMetrics fontMetrics;
+global_variable f32 FontScale = 3.5f;
+
+global_variable char originalFileBuffer[1024];
+global_variable char addBuffer[1024];
 
 #endif // EDITOR_H

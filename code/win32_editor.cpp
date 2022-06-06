@@ -27,7 +27,7 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance,
     {
         return -1;
     }
-    LoadWGLExtensions();
+    WIN32LoadWGLExtensions();
     HWND editorWindow = CreateWindowExA(0, windowClass.lpszClassName, "editor",
                                         WS_OVERLAPPEDWINDOW, CW_USEDEFAULT,
                                         CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
@@ -46,7 +46,7 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         return -1;
     }
     wglMakeCurrent(deviceContext, openglContext);
-    LoadGLFunctions();
+    WIN32LoadGLFunctions();
     
 #if EDITOR_OPENGL_DEBUG
     glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_ARB);
@@ -54,27 +54,39 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance,
 #endif
     
     unsigned char *fontBuffer = (unsigned char *)WIN32LoadFile("assets\\JuliaMono-Regular.ttf");
-    //LoadCodepointTextures(fontBuffer);
-    VirtualFree(fontBuffer, 0, MEM_RELEASE);
+    unsigned char *fontatlasBuffer = (unsigned char *)VirtualAlloc(0, fontatlasWidth * fontatlasWidth, MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE);
+    eglGenerateFontAtlas(fontBuffer, fontatlasBuffer);
     
-    char *textVertBuffer = (char *)WIN32LoadFile("..\\code\\text_vert.glsl");
-    char *textFragBuffer = (char *)WIN32LoadFile("..\\code\\text_frag.glsl");
-    textShaderProgId = LoadGLShaders(textVertBuffer, textFragBuffer);
-    VirtualFree(textVertBuffer, 0, MEM_RELEASE);
-    VirtualFree(textFragBuffer, 0, MEM_RELEASE);
-    
-    char *cursorVertBuffer = (char *)WIN32LoadFile("..\\code\\cursor_vert.glsl");
-    char *cursorFragBuffer = (char *)WIN32LoadFile("..\\code\\cursor_frag.glsl");
-    cursorShaderProgId = LoadGLShaders(cursorVertBuffer, cursorFragBuffer);
-    VirtualFree(cursorVertBuffer, 0, MEM_RELEASE);
-    VirtualFree(cursorFragBuffer, 0, MEM_RELEASE);
+    unsigned char *demoFileBuffer = (unsigned char*)WIN32LoadFile("assets\\demo.txt");
+    {
+        glEnable(GL_BLEND);
+        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+        glGenTextures(1, &fontatlasTextureId);
+        glBindTexture(GL_TEXTURE_2D, fontatlasTextureId);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, fontatlasWidth, fontatlasWidth, 0, GL_RED,
+                     GL_UNSIGNED_BYTE, fontatlasBuffer);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        
+        glActiveTexture(GL_TEXTURE0);
+        glBindTexture(GL_TEXTURE_2D, fontatlasTextureId);
+    }
+    char *rectVertBuffer = (char *)WIN32LoadFile("..\\code\\rect_vert.glsl");
+    char *rectFragBuffer = (char *)WIN32LoadFile("..\\code\\rect_frag.glsl");
+    rectShaderProgId = eglCreateShaderProg(rectVertBuffer, rectFragBuffer);
+    VirtualFree(rectVertBuffer, 0, MEM_RELEASE);
+    VirtualFree(rectFragBuffer, 0, MEM_RELEASE);
     
     RECT rect;
     GetClientRect(editorWindow, &rect);
     uint32_t width = rect.right - rect.left;
     uint32_t height = rect.bottom - rect.top;
-    LoadGLMVP(width, height);
-    LoadGLBuffers();
+    eglLoadMVP(width, height);
+    eglCreateVertexBuffer();
     
     ShowWindow(editorWindow, SW_SHOW);
     
@@ -86,10 +98,15 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance,
             TranslateMessage(&message);
             DispatchMessage(&message);
             
-            // RenderText(&original_buffer, &add_buffer);
+            Vec2f topLeft = { 0 };
+            eglDrawText(&topLeft, "hello World");
             SwapBuffers(deviceContext);
         }
     }
+    
+    VirtualFree(demoFileBuffer, 0, MEM_RELEASE);
+    VirtualFree(fontBuffer, 0, MEM_RELEASE);
+    VirtualFree(fontatlasBuffer, 0, MEM_RELEASE);
     
     wglMakeCurrent(0, 0);
     wglDeleteContext(openglContext);
@@ -120,7 +137,7 @@ LRESULT CALLBACK EditorWindowProc(HWND window, UINT message, WPARAM wParam, LPAR
                 UINT windowWidth = bounds.right - bounds.left;
                 UINT windowHeight = bounds.bottom - bounds.top;
                 glViewport(0, 0, windowWidth, windowHeight);
-                LoadGLMVP(windowWidth, windowHeight);
+                eglLoadMVP(windowWidth, windowHeight);
             }
         }
         break;
@@ -134,7 +151,7 @@ LRESULT CALLBACK EditorWindowProc(HWND window, UINT message, WPARAM wParam, LPAR
                 UINT window_width = bounds.right - bounds.left;
                 UINT window_height = bounds.bottom - bounds.top;
                 glViewport(0, 0, window_width, window_height);
-                LoadGLMVP(window_width, window_height);
+                eglLoadMVP(window_width, window_height);
             }
         }
         break;
@@ -182,7 +199,7 @@ void Input(WPARAM wParam)
     }
 }
 
-void LoadWGLExtensions()
+void WIN32LoadWGLExtensions()
 {
     WNDCLASSEXA dummyWindowClass = {};
     dummyWindowClass.cbSize = sizeof(WNDCLASSEXA);
@@ -303,7 +320,7 @@ void* WIN32LoadFile(const char *filePath)
     }
 }
 
-static void LoadGLFunctions()
+static void WIN32LoadGLFunctions()
 {
     GL_LOAD_FUNCTION(glGenerateMipmap, PFNGLGENERATEMIPMAPPROC);
     GL_LOAD_FUNCTION(glGenVertexArrays, PFNGLGENVERTEXARRAYSPROC);
