@@ -1,5 +1,4 @@
 #include "editor.h"
-#include <math.h>
 
 static void eglLoadUniformMatrix4fv(u32 shaderProgramId, f32 *matrix,
                                     const char *uniformName)
@@ -18,41 +17,70 @@ static void eglLoadMVP(u32 windowWidth, u32 windowHeight)
 {
     mat4 orthographic;
     f32 orthoLeft = 0.0f;
-    f32 orthoRight = (f32)((f32)windowWidth*FontScale);
-    f32 orthoBottom = (f32)((f32)windowHeight*FontScale);
+    f32 orthoRight = (f32)((f32)windowWidth * 3.0f);
+    f32 orthoBottom = (f32)((f32)windowHeight * 3.0f);
     f32 orthoTop = 0.0f;
     f32 orthoNear = 1.0f;
     f32 orthoFar = -1.0f;
     glm_ortho(orthoLeft, orthoRight, orthoBottom,
               orthoTop, orthoNear, orthoFar, orthographic);
     
-    eglLoadUniformMatrix4fv(rectShaderProgId, (f32 *)orthographic, "projection");
+    eglLoadUniformMatrix4fv(shaderProgId, (f32 *)orthographic, "projection");
 }
 
-static void eglCreateVertexBuffer()
+void allocateBatchMemGpu()
 {
-    u32 indices[] =
+    u32 offset = 0;
+    for (u32 i = 0; i < BATCH_INDICES_SIZE; i += 6)
     {
-        0, 1, 3,
-        1, 2, 3
-    };
+        indices[i + 0] = offset + 0;
+        indices[i + 1] = offset + 1;
+        indices[i + 2] = offset + 3;
+        indices[i + 3] = offset + 1;
+        indices[i + 4] = offset + 2;
+        indices[i + 5] = offset + 3;
+        offset += 4;
+    }
+
+    u32 vao;
+    u32 vbo;
+    u32 ebo;
+    glGenVertexArrays(1, &vao);
+    glGenBuffers(1, &vbo);
+    glGenBuffers(1, &ebo);
     
-    glGenVertexArrays(1, &rectVAO);
-    glBindVertexArray(rectVAO);
+    glBindVertexArray(vao);
+    glBindBuffer(GL_ARRAY_BUFFER, vbo);
+    glBufferData(GL_ARRAY_BUFFER, sizeof(vertices), 0, GL_DYNAMIC_DRAW);
+    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, ebo);
+    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(indices), indices, GL_STATIC_DRAW);
     
-    glGenBuffers(1, &rectVBO);
-    glBindBuffer(GL_ARRAY_BUFFER, rectVBO);
-    glBufferData(GL_ARRAY_BUFFER, sizeof(f32)*5*4, 0, GL_DYNAMIC_DRAW);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 5*sizeof(GLfloat), (void *)0);
+    glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, vertCoords));
     glEnableVertexAttribArray(0);
-    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, 5*sizeof(GLfloat), (void *)(3*sizeof(GLfloat)));
+    glVertexAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, texCoords));
     glEnableVertexAttribArray(1);
-    
-    glGenBuffers(1, &rectEBO);
-    glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, rectEBO);
-    glBufferData(GL_ELEMENT_ARRAY_BUFFER, sizeof(u32)*3*2, indices, GL_STATIC_DRAW);
-    
-    glBindVertexArray(0);
+    glVertexAttribPointer(2, 4, GL_FLOAT, GL_FALSE, sizeof(Vertex), (void*)offsetof(Vertex, color));
+    glEnableVertexAttribArray(2);
+
+    batch.ebo = ebo;
+    batch.vbo = vbo;
+    batch.vao = vao;
+    batch.verticesFilled = 0;
+}
+
+static void eglLoadTexture(u32 *texId, u32 width, u32 height, unsigned char *data)
+{
+    glEnable(GL_BLEND);
+    glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+    glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
+    glGenTextures(1, texId);
+    glBindTexture(GL_TEXTURE_2D, *texId);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+    glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, width, width, 0, GL_RED, GL_UNSIGNED_BYTE, data);
+    glBindTexture(GL_TEXTURE_2D, 0);
 }
 
 static void eglGenerateFontAtlas(unsigned char *fontBuffer, unsigned char *fontatlasBuffer)
@@ -73,9 +101,9 @@ static void eglGenerateFontAtlas(unsigned char *fontBuffer, unsigned char *fonta
     descent = (int)floorf(scale * descent);
     lineGap = (int)floorf(scale * lineGap);
     
-    fontMetrics.ascent = ascent;
-    fontMetrics.descent = descent;
-    fontMetrics.lineGap = lineGap;
+    atlas.f.ascent = ascent;
+    atlas.f.descent = descent;
+    atlas.f.lineGap = lineGap;
     
     u32 atlasXOffset = 0;
     u32 atlasYOffset = 0;
@@ -94,7 +122,7 @@ static void eglGenerateFontAtlas(unsigned char *fontBuffer, unsigned char *fonta
         advanceWidth = (int)floorf(advanceWidth*scale);
         leftSideBearing = (int)floorf(leftSideBearing*scale);
         
-        if (atlasXOffset + bitmapWidth >= fontatlasWidth)
+        if (atlasXOffset + bitmapWidth >= atlas.width)
         {
             atlasXOffset = 0;
             atlasYOffset += ascent - descent;
@@ -104,18 +132,24 @@ static void eglGenerateFontAtlas(unsigned char *fontBuffer, unsigned char *fonta
         {
             for (i32 x = 0; x < bitmapWidth; x++)
             {
-                fontatlasBuffer[((y + atlasYOffset)*fontatlasWidth) + x + atlasXOffset] = bitmap[(y*bitmapWidth) + x];
+                i32 fontatlasIndex = ((y + atlasYOffset)*atlas.width) + x + atlasXOffset;
+                i32 bitmapIndex = (y*bitmapWidth) + x;
+                
+                fontatlasBuffer[fontatlasIndex] = bitmap[bitmapIndex];
+                fontatlasBuffer[fontatlasIndex + 1] = 0;
+                fontatlasBuffer[fontatlasIndex + 2] = 0;
+                fontatlasBuffer[fontatlasIndex + 3] = 0;
             }
         }
         
-        glyph[c].width = bitmapWidth;
-        glyph[c].height = bitmapHeight;
-        glyph[c].xoffset = xoffset;
-        glyph[c].yoffset = yoffset;
-        glyph[c].leftSideBearing = leftSideBearing;
-        glyph[c].advance = advanceWidth;
-        glyph[c].fontatlasOffsetX = atlasXOffset;
-        glyph[c].fontatlasOffsetY = atlasYOffset;
+        atlas.g[c].width = bitmapWidth;
+        atlas.g[c].height = bitmapHeight;
+        atlas.g[c].xoffset = xoffset;
+        atlas.g[c].yoffset = yoffset;
+        atlas.g[c].leftSideBearing = leftSideBearing;
+        atlas.g[c].advance = advanceWidth;
+        atlas.g[c].atlasXoffset = atlasXOffset;
+        atlas.g[c].atlasYoffset = atlasYOffset;
         
         atlasXOffset += bitmapWidth;
     }
@@ -148,57 +182,89 @@ GLuint eglCreateShaderProg(char *vertShaderBuffer, char *fragShaderBuffer)
         Assert(status == 1);
     }
     
-    GLuint shaderProgId = glCreateProgram();
-    glAttachShader(shaderProgId, vertShaderId);
-    glAttachShader(shaderProgId, fragShaderId);
-    glLinkProgram(shaderProgId);
-    glGetProgramiv(shaderProgId, GL_LINK_STATUS, &status);
+    GLuint shaderProgId_ = glCreateProgram();
+    glAttachShader(shaderProgId_, vertShaderId);
+    glAttachShader(shaderProgId_, fragShaderId);
+    glLinkProgram(shaderProgId_);
+    glGetProgramiv(shaderProgId_, GL_LINK_STATUS, &status);
     if (!status)
     {
-        glGetProgramInfoLog(shaderProgId, 1024, 0, errorLog);
+        glGetProgramInfoLog(shaderProgId_, 1024, 0, errorLog);
         OutputDebugStringA(errorLog);
         Assert(status == 1);
     }
-    return shaderProgId;
+    return shaderProgId_;
 }
 
-void eglDrawRect(Vec2f *topLeft, Vec2f *bottomRight, Vec2f *texTopLeft, Vec2f *texBottomRight)
+void flushGpuBuffer()
 {
-    f32 x1 = topLeft->x;
-    f32 y1 = topLeft->y;
-    
-    f32 x2 = bottomRight->x;
-    f32 y2 = bottomRight->y;
-    
-    f32 tex_x1 = texTopLeft->x;
-    f32 tex_y1 = texTopLeft->y;
-    
-    f32 tex_x2 = texBottomRight->x;
-    f32 tex_y2 = texBottomRight->y;
-    
-    GLfloat vertices[] =
-    {
-        x2, y1, 0.0f, tex_x2, tex_y1,
-        x2, y2, 0.0f, tex_x2, tex_y2,
-        x1, y2, 0.0f, tex_x1, tex_y2,
-        x1, y1, 0.0f, tex_x1, tex_y1,
-    };
-    
-    glUseProgram(rectShaderProgId);
-    
-    glBindVertexArray(rectVAO);
-    glBindBuffer(GL_ARRAY_BUFFER, rectVBO);
+    glBindBuffer(GL_ARRAY_BUFFER, batch.vbo);
     glBufferSubData(GL_ARRAY_BUFFER, 0, sizeof(vertices), vertices);
-    glDrawElements(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0);
-    glUseProgram(0);
+    glUseProgram(shaderProgId);
+
+    glActiveTexture(GL_TEXTURE0);
+    glBindTexture(GL_TEXTURE_2D, textureId);
+
+    glBindVertexArray(batch.vao);
+    glDrawElements(GL_TRIANGLES, BATCH_VERTICES_SIZE*6, GL_UNSIGNED_INT, 0);
 }
 
-void eglDrawText(Vec2f *topLeft, char *text)
+void pushCharToGpu(Vec2f *v1, Vec2f *v2, Vec2f *tex_v1, Vec2f *tex_v2)
+{
+    u32 offset = batch.verticesFilled;
+    if (offset >= BATCH_VERTICES_SIZE)
+    {
+        flushGpuBuffer();
+        batch.verticesFilled = 0;
+        offset = batch.verticesFilled;
+    }
+
+    vertices[offset + 0].vertCoords.x = v2->x;
+    vertices[offset + 0].vertCoords.y = v1->y;
+    vertices[offset + 0].texCoords.x = tex_v2->x;
+    vertices[offset + 0].texCoords.y = tex_v1->y;
+    vertices[offset + 0].color.x = 1.0f;
+    vertices[offset + 0].color.y = 1.0f;
+    vertices[offset + 0].color.z = 1.0f;
+    vertices[offset + 0].color.w = 1.0f;
+
+    vertices[offset + 1].vertCoords.x = v2->x;
+    vertices[offset + 1].vertCoords.y = v2->y;
+    vertices[offset + 1].texCoords.x = tex_v2->x;
+    vertices[offset + 1].texCoords.y = tex_v2->y;
+    vertices[offset + 1].color.x = 1.0f;
+    vertices[offset + 1].color.y = 1.0f;
+    vertices[offset + 1].color.z = 1.0f;
+    vertices[offset + 1].color.w = 1.0f;
+
+    vertices[offset + 2].vertCoords.x = v1->x;
+    vertices[offset + 2].vertCoords.y = v2->y;
+    vertices[offset + 2].texCoords.x = tex_v1->x;
+    vertices[offset + 2].texCoords.y = tex_v2->y;
+    vertices[offset + 2].color.x = 1.0f;
+    vertices[offset + 2].color.y = 1.0f;
+    vertices[offset + 2].color.z = 1.0f;
+    vertices[offset + 2].color.w = 1.0f;
+
+    vertices[offset + 3].vertCoords.x = v1->x;
+    vertices[offset + 3].vertCoords.y = v1->y;
+    vertices[offset + 3].texCoords.x = tex_v1->x;
+    vertices[offset + 3].texCoords.y = tex_v1->y;
+    vertices[offset + 3].color.x = 1.0f;
+    vertices[offset + 3].color.y = 1.0f;
+    vertices[offset + 3].color.z = 1.0f;
+    vertices[offset + 3].color.w = 1.0f;
+
+    batch.verticesFilled += 4;
+}
+
+void eglDrawText(f32 x, f32 y, char *text)
 {
     glClear(GL_COLOR_BUFFER_BIT);
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     
     f32 lineGap = 0.0f;
+    
     
     for (i32 i = 0; text[i] != 0; i++)
     {
@@ -206,35 +272,40 @@ void eglDrawText(Vec2f *topLeft, char *text)
         
         if (ascii == '\n')
         {
-            topLeft->x = 0;
-            lineGap += (f32)(fontMetrics.ascent - fontMetrics.descent);
+            x = 0;
+            lineGap += (f32)(atlas.f.ascent - atlas.f.descent);
             ascii = text[++i];
         }
         
         if (ascii == '\r')
         {
-            topLeft->x = 0;
-            lineGap += (f32)(fontMetrics.ascent - fontMetrics.descent);
+            x = 0;
+            lineGap += (f32)(atlas.f.ascent - atlas.f.descent);
             i++;
             ascii = text[++i];
         }
         
-        f32 baseline = (f32)(glyph[ascii].yoffset + fontMetrics.ascent);
-        topLeft->y = baseline + lineGap;
+        f32 baseline = (f32)(atlas.g[ascii].yoffset + atlas.f.ascent);
+        y = baseline + lineGap;
         
-        Vec2f bottomRight;
-        bottomRight.x = (f32)(topLeft->x + glyph[ascii].width);
-        bottomRight.y = (f32)(topLeft->y + glyph[ascii].height);
+        Vec2f v1;
+        v1.x = x;
+        v1.y = y;
         
-        Vec2f texTopLeft;
-        texTopLeft.x = ((f32)glyph[ascii].fontatlasOffsetX/(f32)fontatlasWidth);
-        texTopLeft.y = ((f32)glyph[ascii].fontatlasOffsetY/(f32)fontatlasWidth);
+        Vec2f v2;
+        v2.x = (f32)(v1.x + atlas.g[ascii].width);
+        v2.y = (f32)(v1.y + atlas.g[ascii].height);
         
-        Vec2f texBottomRight;
-        texBottomRight.x = ((f32)(glyph[ascii].fontatlasOffsetX+glyph[ascii].width)/(f32)fontatlasWidth);
-        texBottomRight.y = ((f32)(glyph[ascii].fontatlasOffsetY+glyph[ascii].height)/(f32)fontatlasWidth);
+        Vec2f tex_v1;
+        tex_v1.x = ((f32)atlas.g[ascii].atlasXoffset/(f32)atlas.width);
+        tex_v1.y = ((f32)atlas.g[ascii].atlasYoffset/(f32)atlas.width);
         
-        eglDrawRect(topLeft, &bottomRight, &texTopLeft, &texBottomRight);
-        topLeft->x += glyph[ascii].advance;
+        Vec2f tex_v2;
+        tex_v2.x = ((f32)(tex_v1.x + ((f32)atlas.g[ascii].width/(f32)atlas.width)));
+        tex_v2.y = ((f32)(tex_v1.y + ((f32)atlas.g[ascii].height/(f32)atlas.width)));
+
+        pushCharToGpu(&v1, &v2, &tex_v1, &tex_v2);
+        
+        x += atlas.g[ascii].advance;
     }
 }

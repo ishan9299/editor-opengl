@@ -1,5 +1,4 @@
 /* date = January 18th 2022 0:10 pm */
-
 #ifndef EDITOR_OPENGL_H
 #define EDITOR_OPENGL_H
 

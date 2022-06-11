@@ -1,30 +1,6 @@
 #ifndef EDITOR_H
 #define EDITOR_H
 
-#define STB_TRUETYPE_IMPLEMENTATION
-#include "stb_truetype.h"
-
-#if EDITOR_OPENGL_DEBUG
-#define Assert(expression) if(!expression) {*(int *)0 = 0;}
-#else
-#define Assert(expression)
-#endif
-#define global_variable static
-#define local_persist   static
-#define FILE_SIZE 3600
-
-#define ASCII_LOW 32
-#define ASCII_HIGH 126
-
-#define OPENGL_MAJOR_VER 3
-#define OPENGL_MINOR_VER 3
-
-typedef int32_t i32;
-typedef int64_t i64;
-typedef uint32_t u32;
-typedef uint64_t u64;
-typedef float f32;
-
 enum PieceTableFile {
     ORIGINAL_FILE,
     ADD_FILE,
@@ -52,8 +28,8 @@ struct FontGlyphs {
     i32 leftSideBearing;
     i32 advance;
     
-    u32 fontatlasOffsetX;
-    u32 fontatlasOffsetY;
+    u32 atlasXoffset;
+    u32 atlasYoffset;
 };
 
 struct FontMetrics {
@@ -62,31 +38,55 @@ struct FontMetrics {
     i32 descent;
 };
 
-struct Vertex {
-    float vertCoords[2];
-    float vertColor[4];
-    
-    float texCoords[2];
-    float texColor[4];
-};
-
 struct Vec2f {
-    float x;
-    float y;
+    f32 x;
+    f32 y;
 };
 
-global_variable u32 rectShaderProgId;
-global_variable u32 rectVAO;
-global_variable u32 rectVBO;
-global_variable u32 rectEBO;
+struct Vec3f {
+    f32 x;
+    f32 y;
+    f32 z;
+};
 
-global_variable GLuint fontatlasTextureId;
-global_variable u32 fontatlasWidth = 512;
+struct Vec4f {
+    f32 x;
+    f32 y;
+    f32 z;
+    f32 w;
+};
+
+struct Vertex {
+    Vec2f vertCoords;
+    Vec2f texCoords;
+    Vec4f color;
+};
+
+struct FontAtlas {
+    FontGlyphs g[128];
+    FontMetrics f;
+    u32 width = 512;
+};
+
+struct Batch {
+    u32 vao;
+    u32 vbo;
+    u32 ebo;
+    u32 verticesFilled;
+};
+
+global_variable Vertex vertices[BATCH_VERTICES_SIZE];
+global_variable u32 indices[BATCH_INDICES_SIZE];
+global_variable u32 shaderProgId;
+
 global_variable f32 fontSize = 64.0f;
 
-global_variable FontGlyphs glyph[128];
-global_variable FontMetrics fontMetrics;
-global_variable f32 FontScale = 3.5f;
+global_variable u32 textureId;
+
+global_variable Batch batch;
+
+global_variable FontAtlas atlas;
+global_variable f32 FontScale = 1.0f;
 
 global_variable char originalFileBuffer[1024];
 global_variable char addBuffer[1024];

@@ -1,14 +1,11 @@
-#include <stdint.h>
-#include <string.h>
-#include <math.h>
+#include "common.h"
+
 #include <windows.h>
 #include <gl/gl.h>
-#include <map>
-
 #include "editor_opengl.h"
+#include "win32_editor.h"
 #include "cglm/cglm.h"
 #include "editor.cpp"
-#include "win32_editor.h"
 
 int32_t
 WinMain(HINSTANCE instance, HINSTANCE prev_instance,
@@ -17,7 +14,7 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance,
     
     WNDCLASSEXA windowClass = {};
     windowClass.cbSize = sizeof(WNDCLASSEXA);
-    windowClass.style = CS_HREDRAW | CS_VREDRAW | CS_OWNDC;
+    windowClass.style = CS_HREDRAW|CS_VREDRAW|CS_OWNDC;
     windowClass.lpfnWndProc = EditorWindowProc;
     windowClass.hInstance = instance;
     windowClass.hCursor = LoadCursorA(instance, IDC_IBEAM);
@@ -53,40 +50,29 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance,
     glDebugMessageCallbackARB(MessageCallback, 0);
 #endif
     
-    unsigned char *fontBuffer = (unsigned char *)WIN32LoadFile("assets\\JuliaMono-Regular.ttf");
-    unsigned char *fontatlasBuffer = (unsigned char *)VirtualAlloc(0, fontatlasWidth * fontatlasWidth, MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE);
-    eglGenerateFontAtlas(fontBuffer, fontatlasBuffer);
+    char *demoFileBuffer = (char*)WIN32LoadFile("assets\\demo.txt");
     
-    unsigned char *demoFileBuffer = (unsigned char*)WIN32LoadFile("assets\\demo.txt");
-    {
-        glEnable(GL_BLEND);
-        glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-        glPixelStorei(GL_UNPACK_ALIGNMENT, 1);
-        glGenTextures(1, &fontatlasTextureId);
-        glBindTexture(GL_TEXTURE_2D, fontatlasTextureId);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-        glTexImage2D(GL_TEXTURE_2D, 0, GL_RED, fontatlasWidth, fontatlasWidth, 0, GL_RED,
-                     GL_UNSIGNED_BYTE, fontatlasBuffer);
-        glBindTexture(GL_TEXTURE_2D, 0);
-        
-        glActiveTexture(GL_TEXTURE0);
-        glBindTexture(GL_TEXTURE_2D, fontatlasTextureId);
-    }
-    char *rectVertBuffer = (char *)WIN32LoadFile("..\\code\\rect_vert.glsl");
-    char *rectFragBuffer = (char *)WIN32LoadFile("..\\code\\rect_frag.glsl");
-    rectShaderProgId = eglCreateShaderProg(rectVertBuffer, rectFragBuffer);
-    VirtualFree(rectVertBuffer, 0, MEM_RELEASE);
-    VirtualFree(rectFragBuffer, 0, MEM_RELEASE);
+    unsigned char *fontBuffer = (unsigned char *)WIN32LoadFile("assets\\JuliaMono-Regular.ttf");
+    unsigned char *fontatlasBuffer = (unsigned char *)VirtualAlloc(0, atlas.width*atlas.width, 
+                                                                   MEM_COMMIT|MEM_RESERVE,
+                                                                   PAGE_READWRITE);
+    
+    eglGenerateFontAtlas(fontBuffer, fontatlasBuffer);
+    eglLoadTexture(&textureId, atlas.width, atlas.width, fontatlasBuffer);
+
+    allocateBatchMemGpu();
+
+    char *vertBuffer = (char *)WIN32LoadFile("..\\code\\vertex.glsl");
+    char *fragBuffer = (char *)WIN32LoadFile("..\\code\\fragment.glsl");
+    shaderProgId = eglCreateShaderProg(vertBuffer, fragBuffer);
+    VirtualFree(vertBuffer, 0, MEM_RELEASE);
+    VirtualFree(fragBuffer, 0, MEM_RELEASE);
     
     RECT rect;
     GetClientRect(editorWindow, &rect);
-    uint32_t width = rect.right - rect.left;
-    uint32_t height = rect.bottom - rect.top;
-    eglLoadMVP(width, height);
-    eglCreateVertexBuffer();
+    uint32_t windowWidth = rect.right - rect.left;
+    uint32_t windowHeight = rect.bottom - rect.top;
+    eglLoadMVP(windowWidth, windowHeight);
     
     ShowWindow(editorWindow, SW_SHOW);
     
@@ -98,8 +84,8 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance,
             TranslateMessage(&message);
             DispatchMessage(&message);
             
-            Vec2f topLeft = { 0 };
-            eglDrawText(&topLeft, "hello World");
+            eglDrawText(0, 0, demoFileBuffer);
+
             SwapBuffers(deviceContext);
         }
     }
@@ -131,7 +117,7 @@ LRESULT CALLBACK EditorWindowProc(HWND window, UINT message, WPARAM wParam, LPAR
         
         case WM_SIZE:
         {
-            if (wParam == SIZE_MAXIMIZED || wParam == SIZE_RESTORED) {
+            if (wParam == SIZE_MAXIMIZED||wParam == SIZE_RESTORED) {
                 RECT bounds;
                 GetClientRect(window, &bounds);
                 UINT windowWidth = bounds.right - bounds.left;
@@ -303,7 +289,7 @@ void* WIN32LoadFile(const char *filePath)
     {
         if (GetFileSizeEx(file, &fileSize))
         {
-            buffer = VirtualAlloc(0, fileSize.QuadPart, MEM_COMMIT | MEM_RESERVE,
+            buffer = VirtualAlloc(0, fileSize.QuadPart, MEM_COMMIT|MEM_RESERVE,
                                   PAGE_READWRITE);
             if (buffer)
             {
