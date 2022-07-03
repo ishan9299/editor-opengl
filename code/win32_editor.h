@@ -1,10 +1,8 @@
 #ifndef WIN32_EDITOR_H
 #define WIN32_EDITOR_H
 
-#define GL_LOAD_FUNCTION(name, type) name = (type)wglGetProcAddress(#name);
 
-global_variable i32 running = 1;
-global_variable i32 GlobalOpenglInit = 0;
+#define GL_LOAD_FUNCTION(name, type) name = (type)wglGetProcAddress(#name);
 
 #define WGL_CONTEXT_DEBUG_BIT_ARB         0x00000001
 #define WGL_DRAW_TO_WINDOW_ARB            0x2001
@@ -26,9 +24,12 @@ global_variable i32 GlobalOpenglInit = 0;
 #define WGL_CONTEXT_CORE_PROFILE_BIT_ARB  0x00000001
 #define WGL_CONTEXT_FLAGS_ARB             0x2094
 
-typedef BOOL (WINAPI *PFNWGLCHOOSEPIXELFORMATARBPROC) (HDC hdc, const int32_t *piAttribIList,
-                                                       const FLOAT *pfAttribFList, UINT nMaxFormats,
-                                                       int32_t *piFormats, UINT *nNumFormats);
+typedef BOOL (WINAPI *PFNWGLCHOOSEPIXELFORMATARBPROC) (HDC hdc,
+                                                       const int32_t *piAttribIList,
+                                                       const FLOAT *pfAttribFList,
+                                                       UINT nMaxFormats,
+                                                       int32_t *piFormats,
+                                                       UINT *nNumFormats);
 
 typedef HGLRC (WINAPI *PFNWGLCREATECONTEXTATTRIBSARBPROC) (HDC hDC, HGLRC hShareContext,
                                                            const int32_t *attribList);
@@ -36,14 +37,24 @@ typedef HGLRC (WINAPI *PFNWGLCREATECONTEXTATTRIBSARBPROC) (HDC hDC, HGLRC hShare
 global_variable PFNWGLCHOOSEPIXELFORMATARBPROC wglChoosePixelFormatARB = 0;
 global_variable PFNWGLCREATECONTEXTATTRIBSARBPROC wglCreateContextAttribsARB = 0;
 
+struct Win32Window {
+    HWND handle;
+    HDC deviceContext;
+    HGLRC openglContext;
+    u32 width;
+    u32 height;
+};
 
-LRESULT CALLBACK EditorWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM l_param);
-void Input(WPARAM wParam);
+LRESULT CALLBACK EditorWindowProc(HWND window, UINT message, WPARAM wParam,
+                                  LPARAM l_param);
 void WIN32LoadWGLExtensions();
 void WIN32CreateModernOpenglContext(HDC device_context, HGLRC *openglContext);
 void* WIN32LoadFile(const char *file_path);
 static void WIN32LoadGLFunctions();
 void WINAPI MessageCallback(GLuint source, GLuint type, GLuint id, GLuint severity,
                             GLint length, const GLchar* message, void* userParam);
+void WIN32HandleWindowResize(Win32Window *window, GLuint *shaderProgamId, u32 arrSize);
+void WIN32Input(WPARAM wParam, GapBuffer *gb, Cursor *c, Win32Window *window);
+
 
 #endif //WIN32_EDITOR_H

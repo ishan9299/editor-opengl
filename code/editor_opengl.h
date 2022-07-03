@@ -1,4 +1,3 @@
-/* date = January 18th 2022 0:10 pm */
 #ifndef EDITOR_OPENGL_H
 #define EDITOR_OPENGL_H
 
@@ -135,39 +134,42 @@ typedef void (APIENTRY *PFNGLDEBUGMESSAGECONTROLARBPROC) (unsigned int source, u
 typedef void (APIENTRY *PFNGLDEBUGMESSAGEINSERTARBPROC) (unsigned int source, unsigned int type, unsigned int id, unsigned int severity, int length, const char* buf);
 typedef void (APIENTRY *GLDEBUGPROCARB)(unsigned int source, unsigned int type, unsigned int id, unsigned int severity, int length, const char* message, void* userParam);
 typedef void (APIENTRY *PFNGLDEBUGMESSAGECALLBACKARBPROC) (GLDEBUGPROCARB callback, void* userParam);
-typedef GLuint (APIENTRY *PFNGLGETDEBUGMESSAGELOGARBPROC) (unsigned int count, int bufsize, unsigned int* sources,unsigned int* types, unsigned int* ids, unsigned int* severities, int* lengths, char* messageLog);
+typedef GLuint (APIENTRY *PFNGLGETDEBUGMESSAGELOGARBPROC) (unsigned int count, int bufsize, unsigned int* sources,unsigned int* types, unsigned int* ids,
+                                                           unsigned int* severities, int* lengths, char* messageLog);
 typedef void (APIENTRY *PFNGLUNIFORMMATRIX4FVPROC) (GLint location, GLsizei count, GLboolean transpose, const GLfloat *value);
 typedef void (APIENTRY *PFNGLUNIFORM4FVPROC) (GLint location, GLsizei count, const GLfloat *value);
+typedef void (APIENTRY *PFNGLUNIFORM1FPROC) (GLint location, GLfloat v0);
 
 
-static PFNGLGENERATEMIPMAPPROC glGenerateMipmap;
-static PFNGLGENVERTEXARRAYSPROC glGenVertexArrays;
-static PFNGLBINDVERTEXARRAYPROC glBindVertexArray;
-static PFNGLGENBUFFERSPROC glGenBuffers;
-static PFNGLBUFFERDATAPROC glBufferData;
-static PFNGLBUFFERSUBDATAPROC glBufferSubData;
-static PFNGLBINDBUFFERPROC glBindBuffer;
-static PFNGLVERTEXATTRIBPOINTERPROC glVertexAttribPointer;
-static PFNGLENABLEVERTEXATTRIBARRAYPROC glEnableVertexAttribArray;
-static PFNGLCREATESHADERPROC glCreateShader;
-static PFNGLSHADERSOURCEPROC glShaderSource;
-static PFNGLCOMPILESHADERPROC glCompileShader;
-static PFNGLCREATEPROGRAMPROC glCreateProgram;
-static PFNGLATTACHSHADERPROC glAttachShader;
-static PFNGLUSEPROGRAMPROC glUseProgram;
-static PFNGLUNIFORM1IPROC glUniform1i;
-static PFNGLGETUNIFORMLOCATIONPROC glGetUniformLocation;
-static PFNGLLINKPROGRAMPROC glLinkProgram;
-static PFNGLGETSHADERIVPROC glGetShaderiv;
-static PFNGLGETSHADERINFOLOGPROC glGetShaderInfoLog;
-static PFNGLGETPROGRAMINFOLOGPROC glGetProgramInfoLog;
-static PFNGLGETPROGRAMIVPROC glGetProgramiv;
-static PFNGLACTIVETEXTUREPROC glActiveTexture;
-static PFNGLDEBUGMESSAGECONTROLARBPROC glDebugMessageControlARB;
-static PFNGLDEBUGMESSAGEINSERTARBPROC glDebugMessageInsertARB;
-static PFNGLDEBUGMESSAGECALLBACKARBPROC glDebugMessageCallbackARB;
-static PFNGLGETDEBUGMESSAGELOGARBPROC glGetDebugMessageLogARB;
-static PFNGLUNIFORMMATRIX4FVPROC glUniformMatrix4fv;
-static PFNGLUNIFORM4FVPROC glUniform4fv;
+global_variable PFNGLGENERATEMIPMAPPROC glGenerateMipmap;
+global_variable PFNGLGENVERTEXARRAYSPROC glGenVertexArrays;
+global_variable PFNGLBINDVERTEXARRAYPROC glBindVertexArray;
+global_variable PFNGLGENBUFFERSPROC glGenBuffers;
+global_variable PFNGLBUFFERDATAPROC glBufferData;
+global_variable PFNGLBUFFERSUBDATAPROC glBufferSubData;
+global_variable PFNGLBINDBUFFERPROC glBindBuffer;
+global_variable PFNGLVERTEXATTRIBPOINTERPROC glVertexAttribPointer;
+global_variable PFNGLENABLEVERTEXATTRIBARRAYPROC glEnableVertexAttribArray;
+global_variable PFNGLCREATESHADERPROC glCreateShader;
+global_variable PFNGLSHADERSOURCEPROC glShaderSource;
+global_variable PFNGLCOMPILESHADERPROC glCompileShader;
+global_variable PFNGLCREATEPROGRAMPROC glCreateProgram;
+global_variable PFNGLATTACHSHADERPROC glAttachShader;
+global_variable PFNGLUSEPROGRAMPROC glUseProgram;
+global_variable PFNGLUNIFORM1IPROC glUniform1i;
+global_variable PFNGLGETUNIFORMLOCATIONPROC glGetUniformLocation;
+global_variable PFNGLLINKPROGRAMPROC glLinkProgram;
+global_variable PFNGLGETSHADERIVPROC glGetShaderiv;
+global_variable PFNGLGETSHADERINFOLOGPROC glGetShaderInfoLog;
+global_variable PFNGLGETPROGRAMINFOLOGPROC glGetProgramInfoLog;
+global_variable PFNGLGETPROGRAMIVPROC glGetProgramiv;
+global_variable PFNGLACTIVETEXTUREPROC glActiveTexture;
+global_variable PFNGLDEBUGMESSAGECONTROLARBPROC glDebugMessageControlARB;
+global_variable PFNGLDEBUGMESSAGEINSERTARBPROC glDebugMessageInsertARB;
+global_variable PFNGLDEBUGMESSAGECALLBACKARBPROC glDebugMessageCallbackARB;
+global_variable PFNGLGETDEBUGMESSAGELOGARBPROC glGetDebugMessageLogARB;
+global_variable PFNGLUNIFORMMATRIX4FVPROC glUniformMatrix4fv;
+global_variable PFNGLUNIFORM4FVPROC glUniform4fv;
+global_variable PFNGLUNIFORM1FPROC glUniform1f;
 
 #endif //EDITOR_OPENGL_H

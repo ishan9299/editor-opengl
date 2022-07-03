@@ -1,16 +1,23 @@
-#include "common.h"
-
 #include <windows.h>
 #include <gl/gl.h>
+
+#define GAP_BUFFER_IMPLEMENTATION
+#include "gap_buffer.h"
+
+#include "editor_types.h"
 #include "editor_opengl.h"
+#include "editor_opengl_extra.h"
+#include "editor_opengl_batch.h"
+#include "editor_opengl_text.h"
+#include "editor_opengl_cursor.h"
 #include "win32_editor.h"
-#include "cglm/cglm.h"
-#include "editor.cpp"
 
 int32_t
 WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         LPSTR cmdLine, int32_t showCmd)
 {
+
+    Win32Window window;
     
     WNDCLASSEXA windowClass = {};
     windowClass.cbSize = sizeof(WNDCLASSEXA);
@@ -25,164 +32,235 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         return -1;
     }
     WIN32LoadWGLExtensions();
-    HWND editorWindow = CreateWindowExA(0, windowClass.lpszClassName, "editor",
+    window.handle = CreateWindowExA(0, windowClass.lpszClassName, "editor",
                                         WS_OVERLAPPEDWINDOW, CW_USEDEFAULT,
-                                        CW_USEDEFAULT, CW_USEDEFAULT, CW_USEDEFAULT,
-                                        0, 0, instance, 0);
-    if (!editorWindow)
+                                        CW_USEDEFAULT, CW_USEDEFAULT,
+                                        CW_USEDEFAULT, 0, 0, instance, 0);
+
+    if (!window.handle)
     {
         return -1;
     }
     
-    HDC deviceContext = GetDC(editorWindow);
-    HGLRC openglContext;
-    WIN32CreateModernOpenglContext(deviceContext, &openglContext);
+    window.deviceContext = GetDC(window.handle);
+    WIN32CreateModernOpenglContext(window.deviceContext, &window.openglContext);
     
-    if (!openglContext)
+    if (!window.openglContext)
     {
         return -1;
     }
-    wglMakeCurrent(deviceContext, openglContext);
+    wglMakeCurrent(window.deviceContext, window.openglContext);
     WIN32LoadGLFunctions();
     
 #if EDITOR_OPENGL_DEBUG
     glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS_ARB);
     glDebugMessageCallbackARB(MessageCallback, 0);
 #endif
-    
+
     char *demoFileBuffer = (char*)WIN32LoadFile("assets\\demo.txt");
-    
-    unsigned char *fontBuffer = (unsigned char *)WIN32LoadFile("assets\\JuliaMono-Regular.ttf");
-    unsigned char *fontatlasBuffer = (unsigned char *)VirtualAlloc(0, atlas.width*atlas.width, 
-                                                                   MEM_COMMIT|MEM_RESERVE,
-                                                                   PAGE_READWRITE);
-    
-    eglGenerateFontAtlas(fontBuffer, fontatlasBuffer);
-    eglLoadTexture(&textureId, atlas.width, atlas.width, fontatlasBuffer);
+    Vertex batchVertices[BATCH_VERTICES_SIZE];
+    u32 batchIndices[BATCH_INDICES_SIZE];
+    Batch fontBatch;
+    FontAtlas fontAtlas;
 
-    allocateBatchMemGpu();
+    unsigned char *fontBuffer =
+        (unsigned char *)WIN32LoadFile("assets\\JuliaMono-Regular.ttf");
 
-    char *vertBuffer = (char *)WIN32LoadFile("..\\code\\vertex.glsl");
-    char *fragBuffer = (char *)WIN32LoadFile("..\\code\\fragment.glsl");
-    shaderProgId = eglCreateShaderProg(vertBuffer, fragBuffer);
-    VirtualFree(vertBuffer, 0, MEM_RELEASE);
-    VirtualFree(fragBuffer, 0, MEM_RELEASE);
-    
+    unsigned char *fontAtlasBuffer =
+        (unsigned char *)VirtualAlloc(0, fontAtlas.width*fontAtlas.width,
+                                      MEM_COMMIT|MEM_RESERVE, PAGE_READWRITE);
+
+    editorFontInit(fontBuffer, fontAtlasBuffer, &fontAtlas, &fontBatch, batchIndices);
+
+    Cursor c;
+    i32 cursorHeight = fontAtlas.f.ascent - fontAtlas.f.descent;
+    i32 cursorWidth = 5;
+    editorCursorInit(&c, cursorWidth, cursorHeight);
+
+    GapBuffer gb = gapBufferInit();
+
+    GLuint shaderProgIds[] = {
+        fontBatch.shaderProgId,
+        c.shaderProgId
+    };
+
     RECT rect;
-    GetClientRect(editorWindow, &rect);
-    uint32_t windowWidth = rect.right - rect.left;
-    uint32_t windowHeight = rect.bottom - rect.top;
-    eglLoadMVP(windowWidth, windowHeight);
-    
-    ShowWindow(editorWindow, SW_SHOW);
+    GetClientRect(window.handle, &rect);
+    window.width = rect.right - rect.left;
+    window.height = rect.bottom - rect.top;
+    editorLoadMVP(shaderProgIds, ARR_SIZE(shaderProgIds),
+                  window.width, window.height);
+    editorLoadUniformFloat(shaderProgIds, ARR_SIZE(shaderProgIds), 1.0f, "scale");
+
+    ShowWindow(window.handle, SW_SHOW);
+
+    bool running = true;
     
     while(running)
     {
         MSG message;
-        while(PeekMessage(&message, editorWindow, 0, 0, PM_REMOVE))
+        char inputChar = 0;
+
+        while(PeekMessage(&message, window.handle, 0, 0, PM_REMOVE))
         {
+            switch(message.message)
+            {
+                case WM_DESTROY:
+                case WM_QUIT:
+                {
+                    running = false;
+                }
+                break;
+                case WM_SIZE:
+                {
+                    WPARAM wParam = message.wParam;
+                    if (wParam == SIZE_MAXIMIZED || wParam == SIZE_RESTORED)
+                    {
+                        WIN32HandleWindowResize(&window, shaderProgIds,
+                                                ARR_SIZE(shaderProgIds));
+                    }
+                }
+                break;
+                case WM_CHAR:
+                {
+                    inputChar = (char)message.wParam;
+                }
+                break;
+                case WM_KEYDOWN:
+                {
+                    WPARAM wParam = message.wParam;
+                    size_t offset = gb.cursorOffset - 1;
+                    size_t bufferIndex = ((offset) >= 0)? (offset) : 0;
+                    char currentChar = gb.buffer[bufferIndex];
+
+                    if (wParam == VK_RIGHT)
+                    {
+                        if (c.v2.x <= window.width)
+                        {
+                            i32 width = fontAtlas.g[currentChar].advance;
+                            editorCursorRight(&c, width);
+                            gapBufferForward(&gb);
+                        }
+                    }
+                    else if (wParam == VK_LEFT)
+                    {
+                        if (c.v1.x >= 0)
+                        {
+                            i32 width = fontAtlas.g[currentChar].advance;
+                            editorCursorLeft(&c, width);
+                            gapBufferBackward(&gb);
+                        }
+                    }
+                    else if (wParam == VK_UP)
+                    {
+                        if (c.v1.y > 0 && gb.lines > 0)
+                        {
+                            editorCursorUp(&c);
+                        }
+                    }
+                    else if (wParam == VK_DOWN && gb.lines)
+                    {
+                        if (c.v2.y < window.height)
+                        {
+                            editorCursorDown(&c);
+                        }
+                    }
+                }
+                break;
+                case WM_SIZING:
+                {
+                    WIN32HandleWindowResize(&window, shaderProgIds,
+                                            ARR_SIZE(shaderProgIds));
+                }
+                break;
+                case WM_MOUSEWHEEL:
+                {
+                }
+                break;
+            }
             TranslateMessage(&message);
             DispatchMessage(&message);
-            
-            eglDrawText(0, 0, demoFileBuffer);
-
-            SwapBuffers(deviceContext);
         }
+
+        switch(inputChar)
+        {
+            case VK_RETURN:
+            {
+                gapBufferInsert(&gb, '\n');
+                editorCursorDown(&c);
+                c.v1.x = 0.0f;
+                c.v2.x = (f32)c.width;
+            }
+            break;
+            case VK_BACK:
+            {
+                size_t bufferIndex =
+                    ((gb.cursorOffset - 1) >= 0)? (gb.cursorOffset - 1) : 0;
+                char currentChar = gb.buffer[bufferIndex];
+
+                editorCursorLeft(&c, fontAtlas.g[currentChar].advance);
+                gapBufferBackspace(&gb);
+            }
+            break;
+            case VK_DELETE:
+            {
+                gapBufferDelete(&gb);
+            }
+            break;
+            default:
+            {
+                if (inputChar > 31 && inputChar < 128)
+                {
+                    gapBufferInsert(&gb, inputChar);
+                    editorCursorRight(&c, fontAtlas.g[inputChar].advance);
+                    inputChar = 0;
+                }
+            }
+            break;
+        }
+
+        glClear(GL_COLOR_BUFFER_BIT);
+        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+
+        editorDrawCursor(&c);
+        editorDrawBuffer(0, 0, &gb, &fontAtlas, &fontBatch, batchVertices);
+        flushGpuBuffer(&fontBatch, batchVertices);
+        ZeroMemory(batchVertices, BATCH_VERTICES_SIZE);
+
+        SwapBuffers(window.deviceContext);
     }
     
     VirtualFree(demoFileBuffer, 0, MEM_RELEASE);
     VirtualFree(fontBuffer, 0, MEM_RELEASE);
-    VirtualFree(fontatlasBuffer, 0, MEM_RELEASE);
+    VirtualFree(fontAtlasBuffer, 0, MEM_RELEASE);
     
     wglMakeCurrent(0, 0);
-    wglDeleteContext(openglContext);
-    ReleaseDC(editorWindow, deviceContext);
+    wglDeleteContext(window.openglContext);
+    ReleaseDC(window.handle, window.deviceContext);
     
     return 0;
 }
 
-LRESULT CALLBACK EditorWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam)
+void WIN32HandleWindowResize(Win32Window *window, GLuint *shaderProgIds, u32 arrSize)
+{
+    RECT bounds;
+    GetClientRect(window->handle, &bounds);
+    window->width = bounds.right - bounds.left;
+    window->height = bounds.bottom - bounds.top;
+
+    glViewport(0, 0, window->width, window->height);
+
+    editorLoadMVP(shaderProgIds, arrSize, window->width, window->height);
+    editorLoadUniformFloat(shaderProgIds, arrSize, 1.0f, "scale");
+}
+
+LRESULT CALLBACK EditorWindowProc(HWND window, UINT message, WPARAM wParam,
+                                  LPARAM lParam)
 {
     LRESULT messageResult = 0;
     
-    switch(message)
-    {
-        case WM_QUIT:
-        case WM_CLOSE:
-        case WM_DESTROY:
-        {
-            running = 0;
-        }
-        break;
-        
-        case WM_SIZE:
-        {
-            if (wParam == SIZE_MAXIMIZED||wParam == SIZE_RESTORED) {
-                RECT bounds;
-                GetClientRect(window, &bounds);
-                UINT windowWidth = bounds.right - bounds.left;
-                UINT windowHeight = bounds.bottom - bounds.top;
-                glViewport(0, 0, windowWidth, windowHeight);
-                eglLoadMVP(windowWidth, windowHeight);
-            }
-        }
-        break;
-        
-        case WM_SIZING:
-        {
-            if (GlobalOpenglInit)
-            {
-                RECT bounds;
-                GetClientRect(window, &bounds);
-                UINT window_width = bounds.right - bounds.left;
-                UINT window_height = bounds.bottom - bounds.top;
-                glViewport(0, 0, window_width, window_height);
-                eglLoadMVP(window_width, window_height);
-            }
-        }
-        break;
-        case WM_KEYDOWN:
-        {
-            Input(wParam);
-        }
-        break;
-        case WM_MOUSEWHEEL:
-        {
-            OutputDebugStringA("Wheel yo!!");
-        }
-        break;
-        default:
-        {
-            messageResult = DefWindowProc(window, message, wParam, lParam);
-        }
-    }
+    messageResult = DefWindowProc(window, message, wParam, lParam);
     return messageResult;
-}
-
-void Input(WPARAM wParam)
-{
-    switch(wParam)
-    {
-        case VK_LBUTTON:
-        {
-        }
-        break;
-        
-        case VK_RBUTTON:
-        {
-        }
-        break;
-        
-        case VK_BACK:
-        {
-        }
-        break;
-        
-        default:
-        {
-        }
-        break;
-    }
 }
 
 void WIN32LoadWGLExtensions()
@@ -339,7 +417,7 @@ static void WIN32LoadGLFunctions()
 #endif
     GL_LOAD_FUNCTION(glUniformMatrix4fv, PFNGLUNIFORMMATRIX4FVPROC);
     GL_LOAD_FUNCTION(glUniform4fv, PFNGLUNIFORM4FVPROC);
-    GlobalOpenglInit = 1;
+    GL_LOAD_FUNCTION(glUniform1f, PFNGLUNIFORM1FPROC);
 }
 
 void WINAPI
