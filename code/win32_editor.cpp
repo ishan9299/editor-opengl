@@ -77,7 +77,8 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance,
     i32 cursorWidth = 5;
     editorCursorInit(&c, cursorWidth, cursorHeight);
 
-    GapBuffer gb = gapBufferInit();
+    GapBuffer gb;
+    gapBufferInit(&gb, GAP_BUFFER_MIN_SIZE);
 
     GLuint shaderProgIds[] = {
         fontBatch.shaderProgId,
@@ -99,8 +100,8 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance,
     while(running)
     {
         MSG message;
-        char inputChar = 0;
 
+        char gapBufferCopyString[BATCH_VERTICES_SIZE/4] = {0};
         while(PeekMessage(&message, window.handle, 0, 0, PM_REMOVE))
         {
             switch(message.message)
@@ -123,15 +124,19 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance,
                 break;
                 case WM_CHAR:
                 {
-                    inputChar = (char)message.wParam;
+                    char inputChar = (char)message.wParam;
+                    if (inputChar > 31 && inputChar < 128)
+                    {
+                        gapBufferInsertChar(&gb, inputChar);
+                        editorCursorRight(&c, fontAtlas.g[inputChar].advance);
+                        inputChar = 0;
+                    }
                 }
                 break;
                 case WM_KEYDOWN:
                 {
                     WPARAM wParam = message.wParam;
-                    size_t offset = gb.cursorOffset - 1;
-                    size_t bufferIndex = ((offset) >= 0)? (offset) : 0;
-                    char currentChar = gb.buffer[bufferIndex];
+                    char currentChar = gapBufferCurrentCharacter(&gb);
 
                     if (wParam == VK_RIGHT)
                     {
@@ -139,7 +144,7 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance,
                         {
                             i32 width = fontAtlas.g[currentChar].advance;
                             editorCursorRight(&c, width);
-                            gapBufferForward(&gb);
+                            gapBufferShiftCursorRight(&gb);
                         }
                     }
                     else if (wParam == VK_LEFT)
@@ -148,23 +153,42 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance,
                         {
                             i32 width = fontAtlas.g[currentChar].advance;
                             editorCursorLeft(&c, width);
-                            gapBufferBackward(&gb);
+                            gapBufferShiftCursorLeft(&gb);
                         }
                     }
-                    else if (wParam == VK_UP)
+                    else if (wParam == VK_RETURN)
                     {
-                        if (c.v1.y > 0 && gb.lines > 0)
-                        {
-                            editorCursorUp(&c);
-                        }
+                        gapBufferInsertChar(&gb, '\n');
+                        editorCursorDown(&c);
+                        c.v1.x = 0.0f;
+                        c.v2.x = (f32)c.width;
                     }
-                    else if (wParam == VK_DOWN && gb.lines)
+                    else if (wParam == VK_BACK)
                     {
-                        if (c.v2.y < window.height)
-                        {
-                            editorCursorDown(&c);
-                        }
+                        gapBufferBackspaceChar(&gb);
+                        editorCursorLeft(&c, fontAtlas.g[currentChar].advance);
+                        glClear(GL_COLOR_BUFFER_BIT);
+                        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
                     }
+                    else if (wParam == VK_DELETE)
+                    {
+                        gapBufferDeleteChar(&gb);
+                    }
+
+                    // else if (wParam == VK_UP)
+                    // {
+                    //       if (c.v1.y > 0 && gb.lines > 0)
+                    //       {
+                    //           editorCursorUp(&c);
+                    //       }
+                    // }
+                    // else if (wParam == VK_DOWN)
+                    // {
+                    //       if (c.v2.y < window.height)
+                    //       {
+                    //           editorCursorDown(&c);
+                    //       }
+                    // }
                 }
                 break;
                 case WM_SIZING:
@@ -182,50 +206,15 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance,
             DispatchMessage(&message);
         }
 
-        switch(inputChar)
-        {
-            case VK_RETURN:
-            {
-                gapBufferInsert(&gb, '\n');
-                editorCursorDown(&c);
-                c.v1.x = 0.0f;
-                c.v2.x = (f32)c.width;
-            }
-            break;
-            case VK_BACK:
-            {
-                size_t bufferIndex =
-                    ((gb.cursorOffset - 1) >= 0)? (gb.cursorOffset - 1) : 0;
-                char currentChar = gb.buffer[bufferIndex];
-
-                editorCursorLeft(&c, fontAtlas.g[currentChar].advance);
-                gapBufferBackspace(&gb);
-            }
-            break;
-            case VK_DELETE:
-            {
-                gapBufferDelete(&gb);
-            }
-            break;
-            default:
-            {
-                if (inputChar > 31 && inputChar < 128)
-                {
-                    gapBufferInsert(&gb, inputChar);
-                    editorCursorRight(&c, fontAtlas.g[inputChar].advance);
-                    inputChar = 0;
-                }
-            }
-            break;
-        }
 
         glClear(GL_COLOR_BUFFER_BIT);
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
-        editorDrawCursor(&c);
-        editorDrawBuffer(0, 0, &gb, &fontAtlas, &fontBatch, batchVertices);
+        // editorDrawCursor(&c);
+        gapBufferGetString(&gb, gapBufferCopyString);
+        editorDrawBuffer(0, 0, gapBufferCopyString, &fontAtlas,
+                         &fontBatch, batchVertices);
         flushGpuBuffer(&fontBatch, batchVertices);
-        ZeroMemory(batchVertices, BATCH_VERTICES_SIZE);
 
         SwapBuffers(window.deviceContext);
     }

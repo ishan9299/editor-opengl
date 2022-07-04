@@ -172,55 +172,48 @@ void editorFontInit(unsigned char *fontBuffer, unsigned char *fontAtlasBuffer,
     allocateBatchMemGpu(fb, indices);
 }
 
-void editorDrawBuffer(f32 x, f32 y, GapBuffer *gb, FontAtlas *a, Batch *batch,
-                      Vertex *vertices)
+void editorDrawBuffer(f32 x, f32 y, char *str, FontAtlas *a,
+                      Batch *batch, Vertex *vertices)
 {
     f32 lineGap = 0.0f;
 
-    for (size_t i = 0; i < gb->bufferSize; i++)
+    for (size_t i = 0; i < (BATCH_VERTICES_SIZE/4); i++)
     {
-        size_t cursorOffset = gb->cursorOffset;
-        size_t backStart = gb->cursorOffset + gb->gapSize;
-        size_t backLength = gb->bufferSize - gb->cursorOffset - gb->gapSize;
-        size_t backEnd = backStart + backLength;
-
-        if (i < cursorOffset || (i >= backStart && backEnd > i))
+        char c;
+        c = str[i];
+        if (c == '\n')
         {
-            char ascii = gb->buffer[i];
-            if (ascii == '\n')
-            {
-                x = 0;
-                lineGap += (f32)(a->f.ascent - a->f.descent);
-                continue;
-            }
-
-            if (ascii == '\r')
-            {
-                continue;
-            }
-
-            f32 baseline = (f32)(a->g[ascii].yoffset + a->f.ascent);
-            y = baseline + lineGap;
-
-            Vec2f v1;
-            v1.x = x;
-            v1.y = y;
-
-            Vec2f v2;
-            v2.x = (f32)(v1.x + a->g[ascii].width);
-            v2.y = (f32)(v1.y + a->g[ascii].height);
-
-            Vec2f texV1;
-            texV1.x = ((f32)a->g[ascii].atlasXoffset/(f32)a->width);
-            texV1.y = ((f32)a->g[ascii].atlasYoffset/(f32)a->width);
-
-            Vec2f texV2;
-            texV2.x = ((f32)(texV1.x + ((f32)a->g[ascii].width/(f32)a->width)));
-            texV2.y = ((f32)(texV1.y + ((f32)a->g[ascii].height/(f32)a->width)));
-
-            pushCharToGpu(&v1, &v2, &texV1, &texV2, batch, vertices);
-            x += a->g[ascii].advance;
+            x = 0;
+            lineGap += (f32)(a->f.ascent - a->f.descent);
+            continue;
         }
+
+        if (c == '\r')
+        {
+            continue;
+        }
+
+        f32 baseline = (f32)(a->g[c].yoffset + a->f.ascent);
+        y = baseline + lineGap;
+
+        Vec2f v1;
+        v1.x = x;
+        v1.y = y;
+
+        Vec2f v2;
+        v2.x = (f32)(v1.x + a->g[c].width);
+        v2.y = (f32)(v1.y + a->g[c].height);
+
+        Vec2f texV1;
+        texV1.x = ((f32)a->g[c].atlasXoffset/(f32)a->width);
+        texV1.y = ((f32)a->g[c].atlasYoffset/(f32)a->width);
+
+        Vec2f texV2;
+        texV2.x = ((f32)(texV1.x + ((f32)a->g[c].width/(f32)a->width)));
+        texV2.y = ((f32)(texV1.y + ((f32)a->g[c].height/(f32)a->width)));
+
+        pushCharToGpu(&v1, &v2, &texV1, &texV2, batch, vertices);
+        x += a->g[c].advance;
     }
 }
 
