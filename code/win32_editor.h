@@ -51,10 +51,13 @@ void WIN32LoadWGLExtensions();
 void WIN32CreateModernOpenglContext(HDC device_context, HGLRC *openglContext);
 void* WIN32LoadFile(const char *file_path);
 static void WIN32LoadGLFunctions();
-void WINAPI MessageCallback(GLuint source, GLuint type, GLuint id, GLuint severity,
-                            GLint length, const GLchar* message, void* userParam);
-void WIN32HandleWindowResize(Win32Window *window, GLuint *shaderProgamId, u32 arrSize);
+void WINAPI MessageCallback(GLuint source, GLuint type, GLuint id,
+                            GLuint severity, GLint length,
+                            const GLchar* message, void* userParam);
+void WIN32HandleWindowResize(Win32Window *window, GLuint *shaderProgamId,
+                             u32 arrSize);
 void WIN32Input(WPARAM wParam, GapBuffer *gb, Cursor *c, Win32Window *window);
+uint8_t WIN32KeyPressStatus(u32 keyCode);
 
 
 #endif //WIN32_EDITOR_H

@@ -102,6 +102,7 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         MSG message;
 
         char gapBufferCopyString[BATCH_VERTICES_SIZE/4] = {0};
+        u8 ctrlKey = ;
         while(PeekMessage(&message, window.handle, 0, 0, PM_REMOVE))
         {
             switch(message.message)
@@ -136,21 +137,24 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance,
                 case WM_KEYDOWN:
                 {
                     WPARAM wParam = message.wParam;
-                    char currentChar = gapBufferCurrentCharacter(&gb);
+                    char cursorCurrentChar = gapBufferCurrentCharacter(&gb);
+                    char cursorPrevChar = gapBufferCursorPrevChar(&gb);
+                    i32 prevCharWidth = fontAtlas.g[cursorPrevChar].advance;
+                    i32 currentCharWidth = fontAtlas.g[cursorCurrentChar].advance;
+                    // return GetKeyState(nVirtKey) < 0 ? true : false;
+
                     if (wParam == VK_RIGHT)
                     {
                         if(gapBufferShiftCursorRight(&gb))
                         {
-                            editorCursorRight(&c,
-                                              fontAtlas.g[currentChar].advance);
+                            editorCursorRight(&c, currentCharWidth);
                         }
                     }
                     else if (wParam == VK_LEFT)
                     {
                         if(gapBufferShiftCursorLeft(&gb))
                         {
-                            editorCursorLeft(&c,
-                                             fontAtlas.g[currentChar].advance);
+                            editorCursorLeft(&c, prevCharWidth);
                         }
                     }
                     else if (wParam == VK_RETURN)
@@ -164,8 +168,7 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance,
                     {
                         if(gapBufferBackspaceChar(&gb))
                         {
-                            editorCursorLeft(&c,
-                                             fontAtlas.g[currentChar].advance);
+                            editorCursorLeft(&c, prevCharWidth);
                         }
                     }
                     else if (wParam == VK_DELETE)
@@ -233,6 +236,10 @@ LRESULT CALLBACK EditorWindowProc(HWND window, UINT message, WPARAM wParam,
     
     messageResult = DefWindowProc(window, message, wParam, lParam);
     return messageResult;
+}
+
+void WIN32KeyPressStatus(u32 keyCode)
+{
 }
 
 void WIN32LoadWGLExtensions()
