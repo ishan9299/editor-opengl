@@ -21,16 +21,16 @@ void gapBufferInit(struct GapBuffer *gb, size_t init);
 void gapBufferFree(struct GapBuffer *gb);
 void gapBufferInsertChar(struct GapBuffer *gb, char c);
 void gapBufferMoveGapToCursor(struct GapBuffer *gb);
-void gapBufferShiftCursorLeft(struct GapBuffer *gb);
-void gapBufferShiftCursorRight(struct GapBuffer *gb);
+uint8_t gapBufferShiftCursorLeft(struct GapBuffer *gb);
+uint8_t gapBufferShiftCursorRight(struct GapBuffer *gb);
 void gapBufferUp(struct GapBuffer *gb);
 void gapBufferDown(struct GapBuffer *gb);
 void gapBufferDeleteChar(struct GapBuffer *gb);
-void gapBufferBackspaceChar(struct GapBuffer *gb);
-void gapBufferIterate(struct GapBuffer *gb);
+uint8_t gapBufferBackspaceChar(struct GapBuffer *gb);
 void gapBufferDebug(struct GapBuffer *gb);
 void gapBufferGetString(struct GapBuffer *gb, char *str, size_t strSize);
 
+inline size_t gapBufferLength(struct GapBuffer *gb);
 inline size_t gapBufferGapSize(struct GapBuffer *gb);
 inline size_t gapBufferCurrentIndex(struct GapBuffer *gb);
 inline char gapBufferCurrentCharacter(struct GapBuffer *gb);
@@ -89,20 +89,24 @@ void gapBufferMoveGapToCursor(struct GapBuffer *gb)
     }
 }
 
-void gapBufferShiftCursorLeft(struct GapBuffer *gb)
+uint8_t gapBufferShiftCursorLeft(struct GapBuffer *gb)
 {
     if (gb->cursorPos > 0)
     {
         gb->cursorPos--;
+        return 1;
     }
+    return 0;
 }
 
-void gapBufferShiftCursorRight(struct GapBuffer *gb)
+uint8_t gapBufferShiftCursorRight(struct GapBuffer *gb)
 {
-    if (gb->cursorPos < gb->bufferSize)
+    if (gb->cursorPos < gapBufferLength(gb))
     {
         gb->cursorPos++;
+        return 1;
     }
+    return 0;
 }
 
 void gapBufferDeleteChar(struct GapBuffer *gb)
@@ -114,18 +118,16 @@ void gapBufferDeleteChar(struct GapBuffer *gb)
     }
 }
 
-void gapBufferBackspaceChar(struct GapBuffer *gb)
+uint8_t gapBufferBackspaceChar(struct GapBuffer *gb)
 {
     if (gb->cursorPos > 0)
     {
         gapBufferMoveGapToCursor(gb);
         gb->gapStart--;
         gapBufferShiftCursorLeft(gb);
+        return 1;
     }
-}
-
-void gapBufferIterate(struct GapBuffer *gb)
-{
+    return 0;
 }
 
 void gapBufferDebug(struct GapBuffer *gb)
@@ -147,6 +149,12 @@ void gapBufferGetString(struct GapBuffer *gb, char *str)
                gb->bufferSize - gb->gapEnd);
 }
 
+size_t gapBufferLength(struct GapBuffer *gb)
+{
+    size_t length = gb->bufferSize - gapBufferGapSize(gb);
+    return length;
+}
+
 size_t gapBufferGapSize(struct GapBuffer *gb)
 {
     size_t gapSize = gb->gapEnd - gb->gapStart;
@@ -157,7 +165,7 @@ size_t gapBufferCurrentIndex(struct GapBuffer *gb)
 {
     size_t index = (gb->cursorPos < gb->gapStart)? gb->cursorPos + gb->gapSize : gb->cursorPos;
 
-    return index;
+    return index - 1;
 }
 
 char gapBufferCurrentCharacter(struct GapBuffer *gb)

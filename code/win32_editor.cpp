@@ -137,23 +137,20 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance,
                 {
                     WPARAM wParam = message.wParam;
                     char currentChar = gapBufferCurrentCharacter(&gb);
-
                     if (wParam == VK_RIGHT)
                     {
-                        if (c.v2.x <= window.width)
+                        if(gapBufferShiftCursorRight(&gb))
                         {
-                            i32 width = fontAtlas.g[currentChar].advance;
-                            editorCursorRight(&c, width);
-                            gapBufferShiftCursorRight(&gb);
+                            editorCursorRight(&c,
+                                              fontAtlas.g[currentChar].advance);
                         }
                     }
                     else if (wParam == VK_LEFT)
                     {
-                        if (c.v1.x >= 0)
+                        if(gapBufferShiftCursorLeft(&gb))
                         {
-                            i32 width = fontAtlas.g[currentChar].advance;
-                            editorCursorLeft(&c, width);
-                            gapBufferShiftCursorLeft(&gb);
+                            editorCursorLeft(&c,
+                                             fontAtlas.g[currentChar].advance);
                         }
                     }
                     else if (wParam == VK_RETURN)
@@ -165,30 +162,16 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance,
                     }
                     else if (wParam == VK_BACK)
                     {
-                        gapBufferBackspaceChar(&gb);
-                        editorCursorLeft(&c, fontAtlas.g[currentChar].advance);
-                        glClear(GL_COLOR_BUFFER_BIT);
-                        glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+                        if(gapBufferBackspaceChar(&gb))
+                        {
+                            editorCursorLeft(&c,
+                                             fontAtlas.g[currentChar].advance);
+                        }
                     }
                     else if (wParam == VK_DELETE)
                     {
                         gapBufferDeleteChar(&gb);
                     }
-
-                    // else if (wParam == VK_UP)
-                    // {
-                    //       if (c.v1.y > 0 && gb.lines > 0)
-                    //       {
-                    //           editorCursorUp(&c);
-                    //       }
-                    // }
-                    // else if (wParam == VK_DOWN)
-                    // {
-                    //       if (c.v2.y < window.height)
-                    //       {
-                    //           editorCursorDown(&c);
-                    //       }
-                    // }
                 }
                 break;
                 case WM_SIZING:
@@ -210,7 +193,7 @@ WinMain(HINSTANCE instance, HINSTANCE prev_instance,
         glClear(GL_COLOR_BUFFER_BIT);
         glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 
-        // editorDrawCursor(&c);
+        editorDrawCursor(&c);
         gapBufferGetString(&gb, gapBufferCopyString);
         editorDrawBuffer(0, 0, gapBufferCopyString, &fontAtlas,
                          &fontBatch, batchVertices);
